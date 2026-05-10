@@ -186,7 +186,7 @@ Deploy and manage your lightweight bots or web apps directly from Telegram. Our 
 def deploy_command_manual(message):
     args = message.text.split()
     if len(args) < 2:
-        return bot.reply_to(message, "⚠️ <b>Usage:</b> <code>/deploy <github_url> [pat_token]</code>\n\n<i>Note: PAT token is only required for private repositories.</i>")
+        return bot.reply_to(message, "⚠️ <b>Usage:</b> <code>/deploy &lt;github_url&gt; [pat_token]</code>\n\n<i>Note: PAT token is only required for private repositories.</i>")
     
     repo_url = args[1]
     pat_token = args[2] if len(args) > 2 else None
@@ -430,7 +430,7 @@ def help_menu_callback(call):
     help_text = """📖 <b>BrahMos Intelligence Manual</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 <b>How to Deploy (Automatic CI/CD):</b>
-1️⃣ <b>GitHub Repo:</b> Use <code>/deploy <url> [pat]</code> or just send the link.
+1️⃣ <b>GitHub Repo:</b> Use <code>/deploy &lt;url&gt; [pat]</code> or just send the link.
 2️⃣ <b>ZIP Archive:</b> Upload a <code>.zip</code> file with your code.
 <i>The AI will scan for security, auto-generate setup files, and deploy instantly.</i>
 
@@ -563,7 +563,7 @@ def deploy_menu_callback(call):
 To host your application on <b>BrahMos Cloud</b>, choose one of these methods:
 
 1️⃣ <b>GitHub Repository:</b>
-Send the command <code>/deploy <url> [pat]</code> or just send the public link.
+Send the command <code>/deploy &lt;url&gt; [pat]</code> or just send the public link.
 
 2️⃣ <b>ZIP Archive:</b>
 Upload a <code>.zip</code> file containing your project's source code.
