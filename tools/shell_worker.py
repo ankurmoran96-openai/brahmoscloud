@@ -55,7 +55,13 @@ def deploy_project(user_id, directory, codebase_id):
     try:
         # Build Image using the storage directory
         print(f"Building image {image_tag}...")
-        image, logs = client.images.build(path=user_storage, tag=image_tag, rm=True)
+        image, build_logs = client.images.build(path=user_storage, tag=image_tag, rm=True)
+        
+        # Prune old dangling images to save disk space
+        try:
+            client.images.prune(filters={'dangling': True})
+        except Exception:
+            pass
         
         # Remove existing container if any
         try:
