@@ -504,7 +504,12 @@ def myapps_command(message):
 
 @bot.message_handler(commands=['myplan', 'plan'])
 def myplan_command(message):
-    account_info_callback(message)
+    # For /plan command, show the plan comparison
+    if message.text.startswith('/plan'):
+        view_plans_callback(message)
+    else:
+        # For /myplan, show the current user's status
+        account_info_callback(message)
 
 @bot.callback_query_handler(func=lambda call: call.data == "my_apps")
 def my_apps_callback(call):
@@ -598,6 +603,7 @@ def account_info_callback(call):
 <i>{"Full administrative access granted." if is_admin else "Need more power? Contact the developer for a Pro upgrade."}</i>"""
     
     markup = types.InlineKeyboardMarkup()
+    markup.row(types.InlineKeyboardButton("💎 Premium Plans", callback_data="view_plans"))
     markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
     
     try:
@@ -610,6 +616,48 @@ def account_info_callback(call):
             bot.send_message(chat_id, text, reply_markup=markup)
     except Exception as e:
         print(f"Error in account info view: {e}")
+
+@bot.callback_query_handler(func=lambda call: call.data == "view_plans")
+def view_plans_callback(call):
+    # Handle both message and callback objects
+    is_callback = hasattr(call, 'message')
+    chat_id = call.message.chat.id if is_callback else call.chat.id
+    message_id = call.message.message_id if is_callback else None
+
+    if is_callback:
+        bot.answer_callback_query(call.id)
+
+    text = f"""💎 <b>BrahMos Cloud Premium</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Upgrade your hosting experience with our powerful <b>PRO</b> tier.
+
+🆓 <b>FREE TIER:</b>
+• <b>RAM:</b> {config.FREE_TIER_RAM}MB
+• <b>Disk:</b> {config.FREE_TIER_DISK}MB
+• <b>Max Projects:</b> 3
+• <b>Price:</b> ₹0
+
+🔥 <b>PRO TIER:</b>
+• <b>RAM:</b> {config.PRO_TIER_RAM}MB
+• <b>Disk:</b> {config.PRO_TIER_DISK}MB
+• <b>Max Projects:</b> 10
+• <b>Price:</b> ₹200
+
+<i>To upgrade, please contact the <a href="{config.DEV_LINK}">Developer</a> with your User ID.</i>"""
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.row(types.InlineKeyboardButton("⬅️ Back to Account", callback_data="account_info"))
+    
+    try:
+        if is_callback:
+            try:
+                bot.edit_message_caption(text, chat_id, message_id, reply_markup=markup)
+            except Exception:
+                bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
+        else:
+            bot.send_message(chat_id, text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error in plans view: {e}")
 
 @bot.callback_query_handler(func=lambda call: call.data == "deploy_menu")
 def deploy_menu_callback(call):
