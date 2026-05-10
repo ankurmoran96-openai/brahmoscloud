@@ -379,16 +379,47 @@ def verify_member_callback(call):
 def manage_app_callback(call):
     codebase_id = call.data.replace("manage_", "")
     user_id = call.from_user.id
+    user_state = state_manager.get_user(user_id)
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
     
     if not proj:
         return bot.answer_callback_query(call.id, "❌ Project not found.", show_alert=True)
     
     container_id = proj['container_id']
+    status = proj['status'].capitalize()
+    status_emoji = "🟢" if proj['status'] == 'running' else "🔴"
+    
+    # Fetch real-time RAM usage
+    ram_usage_text = "N/A"
+    ram_left_text = "N/A"
+    
+    if proj['status'] == 'running':
+        try:
+            container = shell_worker.client.containers.get(container_id)
+            stats = container.stats(stream=False)
+            usage_bytes = stats['memory_stats'].get('usage', 0)
+            usage_mb = usage_bytes / (1024 * 1024)
+            
+            is_admin = (user_id == config.ADMIN_ID)
+            if is_admin:
+                ram_usage_text = f"{usage_mb:.2f} MB"
+                ram_left_text = "Unlimited"
+            else:
+                limits = subscription_manager.get_limits(user_state)
+                total_ram = limits['ram']
+                ram_usage_text = f"{usage_mb:.2f} / {total_ram} MB"
+                ram_left_text = f"{max(0, total_ram - usage_mb):.2f} MB"
+        except Exception:
+            ram_usage_text = "Error fetching stats"
+
     text = f"""🛠 <b>Manage Project: {codebase_id}</b>
 ━━━━━━━━━━━━━━━━━━━━━━
-<b>Status:</b> {proj['status'].capitalize()} {"🟢" if proj['status'] == 'running' else "🔴"}
+<b>Status:</b> {status} {status_emoji}
 <b>Container ID:</b> <code>{container_id[:12]}</code>
+
+⚡ <b>Resources:</b>
+• <b>RAM Used:</b> <code>{ram_usage_text}</code>
+• <b>RAM Left:</b> <code>{ram_left_text}</code>
 
 Choose an action below to control your application."""
 
