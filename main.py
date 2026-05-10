@@ -59,7 +59,7 @@ def check_membership(user_id):
 
 # --- Deployment Logic ---
 
-def process_deployment(message, repo_url=None, zip_path=None):
+def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None):
     user_id = message.from_user.id
     user_state = state_manager.get_user(user_id)
     is_admin = (user_id == config.ADMIN_ID)
@@ -78,14 +78,16 @@ def process_deployment(message, repo_url=None, zip_path=None):
         # 2. Extract/Clone
         if repo_url:
             bot.edit_message_text("📂 <b>Cloning repository...</b>", message.chat.id, status_msg.message_id)
-            success = file_manager.clone_repo(repo_url, temp_dir, pat=config.GITHUB_PAT)
+            # Use custom PAT if provided, else fallback to global config PAT
+            active_pat = custom_pat if custom_pat else config.GITHUB_PAT
+            success = file_manager.clone_repo(repo_url, temp_dir, pat=active_pat)
         elif zip_path:
             bot.edit_message_text("📦 <b>Extracting codebase...</b>", message.chat.id, status_msg.message_id)
             file_manager.extract_zip(zip_path, temp_dir)
             success = True
             
         if not success:
-            return bot.edit_message_text("❌ <b>Source Error:</b> Failed to retrieve codebase.", message.chat.id, status_msg.message_id)
+            return bot.edit_message_text("❌ <b>Source Error:</b> Failed to retrieve codebase. Ensure the URL is correct and the PAT is valid for private repos.", message.chat.id, status_msg.message_id)
             
         # 3. AI Analysis
         bot.edit_message_text("🧠 <b>AI Security Scan in progress...</b>", message.chat.id, status_msg.message_id)
@@ -179,6 +181,16 @@ Deploy and manage your lightweight bots or web apps directly from Telegram. Our 
             bot.send_photo(chat_id, photo, caption=caption, reply_markup=get_start_keyboard(user_id))
     else:
         bot.send_message(chat_id, caption, reply_markup=get_start_keyboard(user_id))
+
+@bot.message_handler(commands=['deploy'])
+def deploy_command_manual(message):
+    args = message.text.split()
+    if len(args) < 2:
+        return bot.reply_to(message, "⚠️ <b>Usage:</b> <code>/deploy <github_url> [pat_token]</code>\n\n<i>Note: PAT token is only required for private repositories.</i>")
+    
+    repo_url = args[1]
+    pat_token = args[2] if len(args) > 2 else None
+    process_deployment(message, repo_url=repo_url, custom_pat=pat_token)
 
 @bot.message_handler(commands=['givepremium'])
 def give_premium(message):
@@ -418,13 +430,14 @@ def help_menu_callback(call):
     help_text = """📖 <b>BrahMos Intelligence Manual</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 <b>How to Deploy (Automatic CI/CD):</b>
-1️⃣ <b>GitHub Repo:</b> Send your public URL (e.g., <code>https://github.com/user/repo</code>).
+1️⃣ <b>GitHub Repo:</b> Use <code>/deploy <url> [pat]</code> or just send the link.
 2️⃣ <b>ZIP Archive:</b> Upload a <code>.zip</code> file with your code.
 <i>The AI will scan for security, auto-generate setup files, and deploy instantly.</i>
 
 <b>User Commands:</b>
-• <code>/myplan</code> - Check current tier & limits.
-• <code>/stop [app_id]</code> - Kill an active container.
+• <code>/stop [id]</code> - Kill an active project.
+• <code>/myplan</code> - View your current limits.
+• <code>/myapps</code> - List all your projects.
 
 <i>Need help? Contact Developer or join the Community.</i>"""
     
@@ -550,15 +563,16 @@ def deploy_menu_callback(call):
 To host your application on <b>BrahMos Cloud</b>, choose one of these methods:
 
 1️⃣ <b>GitHub Repository:</b>
-Send the public URL of your GitHub repo (e.g., <code>https://github.com/user/repo</code>).
+Send the command <code>/deploy <url> [pat]</code> or just send the public link.
 
 2️⃣ <b>ZIP Archive:</b>
 Upload a <code>.zip</code> file containing your project's source code.
 
 <i>Our AI will automatically scan your files, create a <code>start.sh</code>, and deploy your container in seconds.</i>"""
-    
+
     markup = types.InlineKeyboardMarkup()
     markup.row(types.InlineKeyboardButton("⬅️ Back", callback_data="back_start"))
+
     
     try:
         bot.edit_message_caption(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
