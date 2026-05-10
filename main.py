@@ -321,6 +321,27 @@ def stats_command_admin(message):
 <i>Monitoring system performance...</i>"""
     bot.reply_to(message, text)
 
+@bot.message_handler(commands=['admincmd', 'adminhelp'])
+def admin_help_command(message):
+    if message.from_user.id != config.ADMIN_ID:
+        return
+    
+    help_text = """👑 <b>Admin Intelligence Manual</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Master your VPS infrastructure with these commands:
+
+<b>👤 User Management</b>
+• <code>/addpremium &lt;user_id&gt; &lt;days&gt;</code> - Grant PRO access.
+• <code>/rempremium &lt;user_id&gt;</code> - Revoke PRO access.
+• <code>/listusers</code> - Audit all users and their files.
+
+<b>📊 System Oversight</b>
+• <code>/stats</code> - View global system usage.
+• <code>/admin</code> or <code>/addcmd</code> - Open the UI Control Panel.
+
+<i>Use these tools responsibly to manage BrahMos Cloud.</i>"""
+    bot.reply_to(message, help_text)
+
 @bot.message_handler(commands=['addcmd', 'admin'])
 def addcmd_admin(message):
     if message.from_user.id != config.ADMIN_ID:
