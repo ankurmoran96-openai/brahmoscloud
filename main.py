@@ -531,15 +531,6 @@ def help_menu_callback(call):
     except Exception:
         bot.edit_message_text(help_text, call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-    # Advertising / Cross-promotion (Post-edit follow up)
-    promotion_text = """🤖 <b>Discover Our Ecosystem:</b>
-• <a href="https://t.me/gitpushbot">@GitPushBot</a> - AI-Powered Git Management.
-• <a href="https://t.me/osintbot">@OsintBot</a> - Advanced Intelligence Tools."""
-    try:
-        bot.send_message(call.message.chat.id, promotion_text, disable_web_page_preview=True)
-    except Exception:
-        pass
-
 @bot.message_handler(commands=['myapps', 'apps'])
 def myapps_command(message):
     my_apps_callback(message)
