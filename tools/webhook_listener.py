@@ -30,13 +30,35 @@ async def github_webhook(user_id: str, codebase_id: str, request: Request):
     payload = await request.json()
     
     # Check if it's a push event
-    if payload.get("ref") == "refs/heads/main":
-        repo_url = payload["repository"]["clone_url"]
+    if payload.get("ref") in ["refs/heads/main", "refs/heads/master"]:
         print(f"CI/CD: Push detected for {user_id}/{codebase_id}. Redeploying...")
         
-        # Trigger redeployment logic (Simplified for now)
-        # In a real scenario, we'd need to re-clone, re-analyze, and re-run shell_worker.
-        # This listener should ideally talk to a task queue or the main bot process.
+        user_storage = os.path.join(shell_worker.STORAGE_BASE, str(user_id), codebase_id)
+        if os.path.exists(user_storage):
+            import subprocess
+            try:
+                # Pull latest changes
+                subprocess.run(['git', 'pull'], cwd=user_storage, check=True)
+            except Exception as e:
+                print(f"Git pull failed: {e}")
+                
+            success, new_container_id = shell_worker.rebuild_container(user_id, codebase_id)
+            if success:
+                # Update state manager to point to the new container ID
+                db = state_manager.load_db()
+                for cont_id, data in list(db["containers"].items()):
+                    if data["codebase_id"] == codebase_id:
+                        state_manager.remove_container(cont_id)
+                state_manager.add_container(user_id, new_container_id, codebase_id)
+                
+                # Notify user
+                import telebot
+                import configuration as config
+                try:
+                    bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode='HTML')
+                    bot.send_message(user_id, f"🔄 <b>Auto-Redeploy Complete!</b>\n━━━━━━━━━━━━━━━━━━━━━━\nYour project <code>{codebase_id}</code> was successfully updated via GitHub Webhook. 🚀")
+                except Exception as e:
+                    print(f"Failed to send webhook notification: {e}")
         
     return {"status": "received"}
 

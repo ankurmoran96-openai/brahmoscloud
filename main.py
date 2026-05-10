@@ -20,7 +20,18 @@ def escape_html(text):
 
 def get_start_keyboard(user_id=None):
     markup = types.InlineKeyboardMarkup()
-    markup.row(types.InlineKeyboardButton("🚀 Deploy App", callback_data="deploy_menu"))
+    
+    has_apps = False
+    if user_id:
+        projects = state_manager.get_user_projects(user_id)
+        if projects:
+            has_apps = True
+            
+    if has_apps:
+        markup.row(types.InlineKeyboardButton("📁 My Applications", callback_data="my_apps"))
+    else:
+        markup.row(types.InlineKeyboardButton("🚀 Deploy App", callback_data="deploy_menu"))
+        
     markup.row(types.InlineKeyboardButton("👤 My Account", callback_data="account_info"),
                types.InlineKeyboardButton("📖 Guide", callback_data="help_menu"))
     markup.row(types.InlineKeyboardButton("👨‍💻 Developer", url=config.DEV_LINK),
@@ -310,7 +321,7 @@ def manage_app_callback(call):
     
     text = f"""🛠 <b>Manage Project: {proj['codebase_id']}</b>
 ━━━━━━━━━━━━━━━━━━━━━━
-<b>Status:</b> {proj['status'].capitalize()}
+<b>Status:</b> {proj['status'].capitalize()} {"🟢" if proj['status'] == 'running' else "🔴"}
 <b>Container ID:</b> <code>{container_id[:12]}</code>
 
 Choose an action below to control your application."""
@@ -318,17 +329,68 @@ Choose an action below to control your application."""
     markup = types.InlineKeyboardMarkup()
     btn_stop = types.InlineKeyboardButton("🛑 Stop", callback_data=f"stop_{container_id}")
     btn_redeploy = types.InlineKeyboardButton("🔄 Redeploy", callback_data=f"redeploy_{proj['codebase_id']}")
+    btn_delete = types.InlineKeyboardButton("🗑 Delete", callback_data=f"delete_{container_id}")
     btn_logs = types.InlineKeyboardButton("📋 View Logs", callback_data=f"logs_{container_id}")
-    btn_back = types.InlineKeyboardButton("⬅️ Back to Dashboard", callback_data="view_stats")
+    btn_back = types.InlineKeyboardButton("⬅️ Back to My Apps", callback_data="my_apps")
     
     markup.row(btn_stop, btn_redeploy)
-    markup.row(btn_logs)
+    markup.row(btn_logs, btn_delete)
     markup.row(btn_back)
     
     try:
         bot.edit_message_caption(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
     except Exception:
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+@bot.message_handler(commands=['myapps', 'apps'])
+def myapps_command(message):
+    my_apps_callback(message)
+
+@bot.message_handler(commands=['stop'])
+def stop_command_manual(message):
+    args = message.text.split()
+    if len(args) < 2:
+        return bot.reply_to(message, "Usage: /stop [app_id]")
+    
+    app_id = args[1]
+    user_id = message.from_user.id
+    projects = state_manager.get_user_projects(user_id)
+    
+    target_container = None
+    for proj in projects:
+        if proj['codebase_id'] == app_id:
+            target_container = proj['container_id']
+            break
+            
+    if not target_container:
+        return bot.reply_to(message, "❌ Application not found.")
+        
+    if shell_worker.stop_container(target_container):
+        state_manager.remove_container(target_container)
+        bot.reply_to(message, f"✅ Application <code>{app_id}</code> stopped and removed.")
+    else:
+        bot.reply_to(message, "❌ Failed to stop container.")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("delete_"))
+def delete_app_callback(call):
+    container_id = call.data.replace("delete_", "")
+    bot.answer_callback_query(call.id, "🗑 Deleting container and files...")
+    
+    if shell_worker.stop_container(container_id):
+        proj = state_manager.get_container_info(container_id)
+        if proj:
+            user_id = proj['user_id']
+            code_id = proj['codebase_id']
+            path = os.path.join(shell_worker.STORAGE_BASE, str(user_id), code_id)
+            import shutil
+            if os.path.exists(path):
+                shutil.rmtree(path)
+                
+        state_manager.remove_container(container_id)
+        bot.answer_callback_query(call.id, "✅ Application deleted successfully.", show_alert=True)
+        my_apps_callback(call)
+    else:
+        bot.answer_callback_query(call.id, "❌ Failed to delete container.", show_alert=True)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
 def stop_app_callback(call):
@@ -338,7 +400,7 @@ def stop_app_callback(call):
     if shell_worker.stop_container(container_id):
         state_manager.remove_container(container_id)
         bot.answer_callback_query(call.id, "✅ Application stopped.", show_alert=True)
-        view_stats_callback(call)
+        my_apps_callback(call)
     else:
         bot.answer_callback_query(call.id, "❌ Failed to stop container.", show_alert=True)
 
@@ -371,6 +433,61 @@ def help_menu_callback(call):
     except Exception:
         bot.edit_message_text(help_text, call.message.chat.id, call.message.message_id, reply_markup=markup)
 
+@bot.message_handler(commands=['myapps', 'apps'])
+def myapps_command(message):
+    my_apps_callback(message)
+
+@bot.callback_query_handler(func=lambda call: call.data == "my_apps")
+def my_apps_callback(call):
+    # Handle both message and callback objects
+    is_callback = hasattr(call, 'message')
+    user_id = call.from_user.id
+    chat_id = call.message.chat.id if is_callback else call.chat.id
+    message_id = call.message.message_id if is_callback else None
+
+    if is_callback:
+        bot.answer_callback_query(call.id)
+        
+    projects = state_manager.get_user_projects(user_id)
+    
+    text = f"""📁 <b>My Applications</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Select a project to manage its status or deploy a new application.\n\n"""
+    
+    markup = types.InlineKeyboardMarkup()
+    markup.row(types.InlineKeyboardButton("🚀 Deploy New App", callback_data="deploy_menu"))
+    
+    if not projects:
+        text += "<i>No active deployments found.</i>"
+    else:
+        proj_buttons = []
+        for proj in projects:
+            status_emoji = "🟢" if proj['status'] == 'running' else "🔴"
+            code_id = proj['codebase_id']
+            dir_id = proj['container_id'][:12]
+            text += f"• {status_emoji} <b>Project:</b> <code>{code_id}</code> | <b>Dir ID:</b> <code>{dir_id}</code>\n"
+            proj_buttons.append(types.InlineKeyboardButton(f"⚙️ {code_id}", callback_data=f"manage_{proj['container_id']}"))
+        
+        # Grid layout: 2 buttons per row
+        for i in range(0, len(proj_buttons), 2):
+            if i + 1 < len(proj_buttons):
+                markup.row(proj_buttons[i], proj_buttons[i+1])
+            else:
+                markup.row(proj_buttons[i])
+                
+    markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
+    
+    try:
+        if is_callback:
+            try:
+                bot.edit_message_caption(text, chat_id, message_id, reply_markup=markup)
+            except Exception:
+                bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
+        else:
+            bot.send_message(chat_id, text, reply_markup=markup)
+    except Exception as e:
+        print(f"Error in my_apps view: {e}")
+
 @bot.callback_query_handler(func=lambda call: call.data == "account_info")
 def account_info_callback(call):
     bot.answer_callback_query(call.id)
@@ -393,28 +510,11 @@ def account_info_callback(call):
 • RAM: {ram_limit}
 • Disk: {disk_limit}
 
-<b>Active Projects ({active_bots}):</b>\n"""
+<b>Active Projects:</b> {active_bots}
+
+<i>{"Full administrative access granted." if is_admin else "Need more power? Contact the developer for a Pro upgrade."}</i>"""
     
     markup = types.InlineKeyboardMarkup()
-    
-    if not projects:
-        text += "<i>No active deployments found.</i>"
-    else:
-        proj_buttons = []
-        for proj in projects:
-            status_emoji = "🟢" if proj['status'] == 'running' else "🔴"
-            code_id = proj['codebase_id']
-            dir_id = proj['container_id'][:12]
-            text += f"• {status_emoji} <b>Project:</b> <code>{code_id}</code> | <b>Dir ID:</b> <code>{dir_id}</code>\n"
-            proj_buttons.append(types.InlineKeyboardButton(f"⚙️ {code_id}", callback_data=f"manage_{proj['container_id']}"))
-        
-        # Grid layout: 2 buttons per row
-        for i in range(0, len(proj_buttons), 2):
-            if i + 1 < len(proj_buttons):
-                markup.row(proj_buttons[i], proj_buttons[i+1])
-            else:
-                markup.row(proj_buttons[i])
-                
     markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
     
     try:
@@ -465,7 +565,24 @@ def view_logs_callback(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("redeploy_"))
 def redeploy_callback(call):
-    bot.answer_callback_query(call.id, "🔄 Redeploy feature coming soon!", show_alert=True)
+    codebase_id = call.data.replace("redeploy_", "")
+    user_id = call.from_user.id
+    
+    bot.answer_callback_query(call.id, "🔄 Redeploying container...")
+    
+    success, new_container_id = shell_worker.rebuild_container(user_id, codebase_id)
+    if success:
+        # Update state manager
+        db = state_manager.load_db()
+        for cont_id, data in list(db["containers"].items()):
+            if data["codebase_id"] == codebase_id:
+                state_manager.remove_container(cont_id)
+                
+        state_manager.add_container(user_id, new_container_id, codebase_id)
+        bot.answer_callback_query(call.id, "✅ Application redeployed successfully.", show_alert=True)
+        my_apps_callback(call)
+    else:
+        bot.answer_callback_query(call.id, f"❌ Failed to redeploy container.", show_alert=True)
 
 if __name__ == "__main__":
     # Start Resource Watchdog

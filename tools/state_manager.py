@@ -72,3 +72,15 @@ def get_user_projects(user_id):
 def get_container_info(container_id):
     db = load_db()
     return db["containers"].get(container_id)
+
+def remove_container(container_id):
+    db = load_db()
+    if container_id in db["containers"]:
+        user_id = str(db["containers"][container_id]["user_id"])
+        if user_id in db["users"]:
+            if container_id in db["users"][user_id]["active_bots"]:
+                db["users"][user_id]["active_bots"].remove(container_id)
+        del db["containers"][container_id]
+        save_db(db)
+        return True
+    return False

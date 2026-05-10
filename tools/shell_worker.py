@@ -78,3 +78,35 @@ def stop_container(container_id):
         return True
     except Exception:
         return False
+
+def rebuild_container(user_id, codebase_id):
+    user_storage = os.path.join(STORAGE_BASE, str(user_id), codebase_id)
+    if not os.path.exists(user_storage):
+        return False, "Project storage not found"
+        
+    image_tag = f"brahmos_{user_id}_{codebase_id}".lower()
+    container_name = f"brahmos_cont_{user_id}_{codebase_id}".lower()
+    
+    try:
+        print(f"Rebuilding image {image_tag}...")
+        client.images.build(path=user_storage, tag=image_tag, rm=True)
+        
+        try:
+            old_container = client.containers.get(container_name)
+            old_container.stop()
+            old_container.remove()
+        except docker.errors.NotFound:
+            pass
+            
+        print(f"Starting container {container_name}...")
+        container = client.containers.run(
+            image_tag,
+            detach=True,
+            name=container_name,
+            mem_limit=f"{config.FREE_TIER_RAM}m",
+            restart_policy={"Name": "always"}
+        )
+        return True, container.id
+    except Exception as e:
+        return False, str(e)
+
