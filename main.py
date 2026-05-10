@@ -411,8 +411,12 @@ def verify_member_callback(call):
         bot.answer_callback_query(call.id, "❌ Verification Failed!", show_alert=True)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("manage_"))
-def manage_app_callback(call):
-    codebase_id = call.data.replace("manage_", "")
+def manage_app_callback(call, code_id=None):
+    if code_id:
+        codebase_id = code_id
+    else:
+        codebase_id = call.data.replace("manage_", "")
+        
     user_id = call.from_user.id
     user_state = state_manager.get_user(user_id)
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
@@ -424,13 +428,30 @@ def manage_app_callback(call):
     status = proj['status'].capitalize()
     status_emoji = "🟢" if proj['status'] == 'running' else "🔴"
     
-    # Fetch real-time RAM usage
+    # Fetch real-time RAM usage & Runtime
     ram_usage_text = "N/A"
     ram_left_text = "N/A"
+    runtime_text = "Offline"
     
     if proj['status'] == 'running':
         try:
             container = shell_worker.client.containers.get(container_id)
+            
+            # Runtime calculation
+            from datetime import datetime
+            started_at = container.attrs['State']['StartedAt']
+            # Convert ISO 8601 to datetime (handling Z and sub-seconds)
+            start_dt = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+            uptime = datetime.now(start_dt.tzinfo) - start_dt
+            
+            hours, remainder = divmod(int(uptime.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            if uptime.days > 0:
+                runtime_text = f"{uptime.days}d {hours}h {minutes}m"
+            else:
+                runtime_text = f"{hours}h {minutes}m {seconds}s"
+
+            # RAM stats
             stats = container.stats(stream=False)
             usage_bytes = stats['memory_stats'].get('usage', 0)
             usage_mb = usage_bytes / (1024 * 1024)
@@ -446,10 +467,12 @@ def manage_app_callback(call):
                 ram_left_text = f"{max(0, total_ram - usage_mb):.2f} MB"
         except Exception:
             ram_usage_text = "Error fetching stats"
+            runtime_text = "Unknown"
 
     text = f"""🛠 <b>Manage Project: {codebase_id}</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 <b>Status:</b> {status} {status_emoji}
+<b>Runtime:</b> <code>{runtime_text}</code>
 <b>Container ID:</b> <code>{container_id[:12]}</code>
 
 ⚡ <b>Resources:</b>
@@ -534,7 +557,7 @@ def stop_app_callback(call):
     if shell_worker.stop_container(proj['container_id']):
         state_manager.update_container_status(proj['container_id'], "stopped")
         bot.answer_callback_query(call.id, "✅ Application stopped.", show_alert=True)
-        manage_app_callback(call)
+        manage_app_callback(call, code_id=codebase_id)
     else:
         bot.answer_callback_query(call.id, "❌ Failed to stop container.", show_alert=True)
 
@@ -552,7 +575,7 @@ def start_app_callback(call):
     if shell_worker.start_container(proj['container_id']):
         state_manager.update_container_status(proj['container_id'], "running")
         bot.answer_callback_query(call.id, "✅ Application started.", show_alert=True)
-        manage_app_callback(call)
+        manage_app_callback(call, code_id=codebase_id)
     else:
         bot.answer_callback_query(call.id, "❌ Failed to start container.", show_alert=True)
 
@@ -820,7 +843,7 @@ def redeploy_callback(call):
                 
         state_manager.add_container(user_id, new_container_id, codebase_id)
         bot.answer_callback_query(call.id, "✅ Application redeployed successfully.", show_alert=True)
-        my_apps_callback(call)
+        manage_app_callback(call, code_id=codebase_id)
     else:
         bot.answer_callback_query(call.id, f"❌ Failed to redeploy container.", show_alert=True)
 
