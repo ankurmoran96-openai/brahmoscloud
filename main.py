@@ -81,13 +81,20 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None):
             # Use custom PAT if provided, else fallback to global config PAT
             active_pat = custom_pat if custom_pat else config.GITHUB_PAT
             success = file_manager.clone_repo(repo_url, temp_dir, pat=active_pat)
+            
+            if not success:
+                if not custom_pat:
+                    return bot.edit_message_text("❌ <b>Access Denied:</b> This repository appears to be private or invalid. <b>Please send a public link or a PAT token along with it.</b> Private repos aren't executable without authorization.", message.chat.id, status_msg.message_id)
+                else:
+                    return bot.edit_message_text("❌ <b>Source Error:</b> Failed to retrieve codebase. Even with the provided PAT, access was denied. Ensure the URL and Token are correct.", message.chat.id, status_msg.message_id)
+
         elif zip_path:
             bot.edit_message_text("📦 <b>Extracting codebase...</b>", message.chat.id, status_msg.message_id)
             file_manager.extract_zip(zip_path, temp_dir)
             success = True
             
         if not success:
-            return bot.edit_message_text("❌ <b>Source Error:</b> Failed to retrieve codebase. Ensure the URL is correct and the PAT is valid for private repos.", message.chat.id, status_msg.message_id)
+            return bot.edit_message_text("❌ <b>Source Error:</b> Failed to retrieve codebase.", message.chat.id, status_msg.message_id)
             
         # 3. AI Analysis
         bot.edit_message_text("🧠 <b>AI Security Scan in progress...</b>", message.chat.id, status_msg.message_id)
