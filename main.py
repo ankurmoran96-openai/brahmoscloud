@@ -634,7 +634,7 @@ Upgrade your hosting experience with our powerful <b>PRO</b> tier.
 🆓 <b>FREE TIER:</b>
 • <b>RAM:</b> {config.FREE_TIER_RAM}MB
 • <b>Disk:</b> {config.FREE_TIER_DISK}MB
-• <b>Max Projects:</b> 3
+• <b>Max Projects:</b> 5
 • <b>Price:</b> ₹0
 
 🔥 <b>PRO TIER:</b>

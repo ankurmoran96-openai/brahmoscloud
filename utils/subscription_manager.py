@@ -5,7 +5,7 @@ TIERS = {
     "free": {
         "ram": config.FREE_TIER_RAM,
         "disk": config.FREE_TIER_DISK,
-        "max_bots": 3
+        "max_bots": 5
     },
     "pro": {
         "ram": config.PRO_TIER_RAM,
