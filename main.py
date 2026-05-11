@@ -564,15 +564,14 @@ def stop_command_manual(message):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("delete_"))
 def delete_app_callback(call):
+    bot.answer_callback_query(call.id, "🗑 Deleting container...")
     codebase_id = call.data.replace("delete_", "")
     user_id = call.from_user.id
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
     
     if not proj:
-        return bot.answer_callback_query(call.id, "❌ Project not found.", show_alert=True)
+        return bot.send_message(call.message.chat.id, "❌ Project not found.")
         
-    bot.answer_callback_query(call.id, "🗑 Deleting container and files...")
-    
     if shell_worker.remove_container_physical(proj['container_id']):
         path = os.path.join(shell_worker.STORAGE_BASE, str(user_id), codebase_id)
         import shutil
@@ -587,39 +586,37 @@ def delete_app_callback(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
 def stop_app_callback(call):
+    bot.answer_callback_query(call.id, "⌛ Stopping container...")
     codebase_id = call.data.replace("stop_", "")
     user_id = call.from_user.id
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
     
     if not proj:
-        return bot.answer_callback_query(call.id, "❌ Project not found.", show_alert=True)
+        return bot.send_message(call.message.chat.id, "❌ Project not found.")
         
-    bot.answer_callback_query(call.id, "⌛ Stopping container...")
-    
     if shell_worker.stop_container(proj['container_id']):
         state_manager.update_container_status(proj['container_id'], "stopped")
-        bot.answer_callback_query(call.id, "✅ Application stopped.", show_alert=True)
+        bot.send_message(call.message.chat.id, "✅ Application stopped.")
         manage_app_callback(call, code_id=codebase_id)
     else:
-        bot.answer_callback_query(call.id, "❌ Failed to stop container.", show_alert=True)
+        bot.send_message(call.message.chat.id, "❌ Failed to stop container.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("start_"))
 def start_app_callback(call):
+    bot.answer_callback_query(call.id, "⌛ Starting container...")
     codebase_id = call.data.replace("start_", "")
     user_id = call.from_user.id
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
     
     if not proj:
-        return bot.answer_callback_query(call.id, "❌ Project not found.", show_alert=True)
+        return bot.send_message(call.message.chat.id, "❌ Project not found.")
         
-    bot.answer_callback_query(call.id, "⌛ Starting container...")
-    
     if shell_worker.start_container(proj['container_id']):
         state_manager.update_container_status(proj['container_id'], "running")
-        bot.answer_callback_query(call.id, "✅ Application started.", show_alert=True)
+        bot.send_message(call.message.chat.id, "✅ Application started.")
         manage_app_callback(call, code_id=codebase_id)
     else:
-        bot.answer_callback_query(call.id, "❌ Failed to start container.", show_alert=True)
+        bot.send_message(call.message.chat.id, "❌ Failed to start container.")
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_start")
 def back_start_callback(call):
@@ -923,10 +920,9 @@ Enable the <b>Proxy (Orange Cloud)</b> in Cloudflare. This hides your VPS IP and
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("redeploy_"))
 def redeploy_callback(call):
+    bot.answer_callback_query(call.id, "🔄 Redeploying container...")
     codebase_id = call.data.replace("redeploy_", "")
     user_id = call.from_user.id
-    
-    bot.answer_callback_query(call.id, "🔄 Redeploying container...")
     
     # Get existing port
     db = state_manager.load_db()
