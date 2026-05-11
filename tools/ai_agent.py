@@ -3,6 +3,82 @@ import json
 import os
 import configuration as config
 
+# --- Secondary Security Agent Prompt ---
+DEEP_SECURITY_PROMPT = """
+You are the BrahMos Cloud Deep Security Auditor. 
+Your only goal is to perform a rigorous, second-stage security audit on a codebase that has already passed a preliminary check but belongs to a user with a history of suspicious activity.
+
+Your audit must be ruthless. Look for:
+- Obfuscated code or hidden network calls.
+- Encrypted payloads that might execute at runtime.
+- Subtle logic that could lead to container escapes or VPS damage.
+
+Interact strictly via:
+1. `confirm_safety`: Call this ONLY if you are 100% sure the code is benign.
+2. `reject_suspicious`: Call this if you find even a single hint of malicious intent. Provide a technical breakdown of the threat.
+"""
+
+def deep_security_audit(file_path_list, code_contents):
+    """
+    Second-layer deep scan for suspicious users.
+    """
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {config.AI_API_KEY}"
+    }
+
+    prompt = f"Perform a Deep Security Audit on these files:\n{json.dumps(file_path_list)}\n\nSnippets:\n{json.dumps(code_contents, indent=2)}"
+
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "confirm_safety",
+                "description": "Call this only if the code is 100% verified as safe.",
+                "parameters": { "type": "object", "properties": {} }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "reject_suspicious",
+                "description": "Call this to block the file if any risk is found.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "technical_reason": { "type": "string", "description": "Deep audit finding." }
+                    },
+                    "required": ["technical_reason"]
+                }
+            }
+        }
+    ]
+
+    try:
+        payload = {
+            "model": config.AI_MODEL,
+            "messages": [
+                {"role": "system", "content": DEEP_SECURITY_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            "tools": tools,
+            "tool_choice": "required"
+        }
+        response = requests.post(config.AI_API_URL, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        result = response.json()
+        tool_call = result['choices'][0]['message'].get('tool_calls')[0]
+        func_name = tool_call['function']['name']
+        
+        if func_name == 'confirm_safety':
+            return {"safe": True, "reason": ""}
+        else:
+            args = json.loads(tool_call['function']['arguments'])
+            return {"safe": False, "reason": args.get("technical_reason", "Deep audit failed.")}
+            
+    except Exception as e:
+        return {"safe": False, "reason": f"Deep Audit Error: {str(e)}"}
+
 def analyze_codebase(file_path_list, code_contents):
     """
     Sends the codebase to the LLM for analysis using strict Tool Calling.

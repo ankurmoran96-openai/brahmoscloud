@@ -82,7 +82,7 @@ def check_membership(user_id):
 
 # --- Deployment Logic ---
 
-def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, project_name=None):
+def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, project_name=None, local_dir=None):
     user_id = message.from_user.id
     user_state = state_manager.get_user(user_id)
     is_admin = (user_id == config.ADMIN_ID)
@@ -90,18 +90,19 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, p
     # 1. Check Subscription
     can_go, reason = subscription_manager.can_deploy(user_state, is_admin=is_admin)
     if not can_go:
+        if local_dir: garbage_collector.cleanup_deployment(local_dir)
         return bot.reply_to(message, f"❌ <b>Deployment Blocked</b>\n{reason}")
     
     status_msg = bot.reply_to(message, "⚙️ <b>Initializing deployment pipeline...</b>")
     
-    temp_dir = file_manager.get_temp_dir()
+    # Use pre-existing local_dir if provided (single files), else create new
+    temp_dir = local_dir if local_dir else file_manager.get_temp_dir()
     success = False
     
     try:
         # 2. Extract/Clone
         if repo_url:
             bot.edit_message_text("📂 <b>Cloning repository...</b>", message.chat.id, status_msg.message_id)
-            # Use custom PAT if provided, else fallback to global config PAT
             active_pat = custom_pat if custom_pat else config.GITHUB_PAT
             success = file_manager.clone_repo(repo_url, temp_dir, pat=active_pat)
             
@@ -116,6 +117,10 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, p
             file_manager.extract_zip(zip_path, temp_dir)
             success = True
             
+        elif local_dir:
+            # Already handled
+            success = True
+            
         if not success:
             return bot.edit_message_text("❌ <b>Source Error:</b> Failed to retrieve codebase.", message.chat.id, status_msg.message_id)
             
@@ -125,8 +130,18 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, p
         analysis = ai_agent.analyze_codebase(file_list, code_contents)
         
         if not analysis.get("safe"):
-            bot.edit_message_text(f"🛑 <b>Security Alert:</b> {analysis.get('reason')}", message.chat.id, status_msg.message_id)
+            # Flag user as suspicious
+            state_manager.flag_suspicious_user(user_id)
+            bot.edit_message_text(f"🛑 <b>Security Alert:</b> {analysis.get('reason')}\n\n<i>Note: Your account has been flagged for a deep audit on future deployments.</i>", message.chat.id, status_msg.message_id)
             return garbage_collector.cleanup_deployment(temp_dir)
+
+        # 3.1 Deep Audit for Suspicious Users
+        if state_manager.is_user_suspicious(user_id):
+            bot.edit_message_text("🔍 <b>Deep Security Audit in progress...</b>", message.chat.id, status_msg.message_id)
+            deep_analysis = ai_agent.deep_security_audit(file_list, code_contents)
+            if not deep_analysis.get("safe"):
+                bot.edit_message_text(f"🛑 <b>Deep Security Alert:</b> {deep_analysis.get('reason')}", message.chat.id, status_msg.message_id)
+                return garbage_collector.cleanup_deployment(temp_dir)
             
         # 4. Preparation
         bot.edit_message_text("🛠 <b>Generating deployment scripts...</b>", message.chat.id, status_msg.message_id)
@@ -237,17 +252,17 @@ Simply send a <b>GitHub Repository URL</b> or upload a <b>ZIP file</b>. Our AI w
 
 # --- Deployment Handlers ---
 
-def set_project_name_step(message, repo_url=None, zip_path=None, custom_pat=None):
+def set_project_name_step(message, repo_url=None, zip_path=None, custom_pat=None, local_dir=None):
     project_name = message.text.strip()
     if len(project_name) < 3:
         project_name = None # Fallback to default
         
-    process_deployment(message, repo_url=repo_url, zip_path=zip_path, custom_pat=custom_pat, project_name=project_name)
+    process_deployment(message, repo_url=repo_url, zip_path=zip_path, custom_pat=custom_pat, project_name=project_name, local_dir=local_dir)
 
-def start_naming_flow(message, repo_url=None, zip_path=None, custom_pat=None):
+def start_naming_flow(message, repo_url=None, zip_path=None, custom_pat=None, local_dir=None):
     text = "📝 <b>Set Project Name:</b>\n━━━━━━━━━━━━━━━━━━━━━━\nPlease send a name for your new application (e.g., <code>My Website</code>)."
     msg = smart_respond(message, text)
-    bot.register_next_step_handler(msg, set_project_name_step, repo_url=repo_url, zip_path=zip_path, custom_pat=custom_pat)
+    bot.register_next_step_handler(msg, set_project_name_step, repo_url=repo_url, zip_path=zip_path, custom_pat=custom_pat, local_dir=local_dir)
 
 @bot.message_handler(commands=['deploy'])
 def deploy_command_manual(message):
@@ -365,21 +380,29 @@ def handle_github_url(message):
     start_naming_flow(message, repo_url=message.text.strip())
 
 @bot.message_handler(content_types=['document'])
-def handle_zip(message):
-    if message.document.file_name.endswith('.zip'):
-        try:
-            bot.set_message_reaction(message.chat.id, message.message_id, [types.ReactionTypeEmoji("🚀")])
-        except Exception:
-            pass
-            
-        file_info = bot.get_file(message.document.file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
+def handle_document_upload(message):
+    try:
+        bot.set_message_reaction(message.chat.id, message.message_id, [types.ReactionTypeEmoji("🚀")])
+    except Exception:
+        pass
         
+    file_info = bot.get_file(message.document.file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+    file_name = message.document.file_name
+    
+    if file_name.endswith('.zip'):
         temp_zip = f"temp_{uuid.uuid4()}.zip"
         with open(temp_zip, 'wb') as f:
             f.write(downloaded_file)
-            
         start_naming_flow(message, zip_path=temp_zip)
+    else:
+        # Handle single file (Python, JS, etc.)
+        temp_dir = file_manager.get_temp_dir()
+        file_path = os.path.join(temp_dir, file_name)
+        with open(file_path, 'wb') as f:
+            f.write(downloaded_file)
+        # Pass the pre-populated temp_dir to the flow
+        start_naming_flow(message, local_dir=temp_dir)
 
 # --- Callbacks ---
 
