@@ -499,7 +499,7 @@ def manage_app_callback(call, code_id=None):
             ram_usage_text = "Error fetching stats"
             runtime_text = "Unknown"
 
-    text = f"""🛠 <b>Manage Project: {proj['project_name']}</b>
+    text = f"""🛠 <b>Manage Project: {proj.get('project_name', f"Project-{codebase_id}")}</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 <b>Status:</b> {status} {status_emoji}
 <b>Runtime:</b> <code>{runtime_text}</code>
