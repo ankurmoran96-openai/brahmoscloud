@@ -119,11 +119,15 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None):
             
         # 5. Docker Deployment
         codebase_id = str(uuid.uuid4())[:8]
-        bot.edit_message_text("🐳 <b>Building Docker container...</b>", message.chat.id, status_msg.message_id)
-        dep_success, container_id = shell_worker.deploy_project(user_id, temp_dir, codebase_id)
+        proj_type = analysis.get("project_type", "bot")
+        is_web = proj_type in ['web_app', 'api']
+        assigned_port = state_manager.get_next_available_port() if is_web else None
+        
+        bot.edit_message_text(f"🐳 <b>Deploying {proj_type.upper()}...</b>", message.chat.id, status_msg.message_id)
+        dep_success, container_id = shell_worker.deploy_project(user_id, temp_dir, codebase_id, port=assigned_port)
         
         if dep_success:
-            state_manager.add_container(user_id, container_id, codebase_id)
+            state_manager.add_container(user_id, container_id, codebase_id, port=assigned_port)
             
             # Post-deployment check
             import time
@@ -131,7 +135,13 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None):
             try:
                 container = shell_worker.client.containers.get(container_id)
                 if container.status == "running":
-                    bot.edit_message_text(f"✅ <b>Deployment Successful!</b>\n━━━━━━━━━━━━━━━━━━━━━━\n<b>Bot ID:</b> <code>{codebase_id}</code>\n<b>Status:</b> Running 🟢\n\nManage your app in the dashboard.", message.chat.id, status_msg.message_id)
+                    access_info = ""
+                    if is_web:
+                        # Professional Subdomain URL
+                        web_url = f"http://{codebase_id}.{config.BASE_DOMAIN}"
+                        access_info = f"\n🌐 <b>URL:</b> {web_url}\n📍 <b>Internal Port:</b> <code>{assigned_port}</code>"
+                    
+                    bot.edit_message_text(f"✅ <b>{proj_type.upper()} Deployed!</b>\n━━━━━━━━━━━━━━━━━━━━━━\n<b>Bot ID:</b> <code>{codebase_id}</code>\n<b>Status:</b> Running 🟢{access_info}\n\nManage your app in the dashboard.", message.chat.id, status_msg.message_id)
                 else:
                     logs = container.logs(tail=20).decode("utf-8")
                     bot.edit_message_text(f"⚠️ <b>Deployment Alert:</b> Container started but is now <code>{container.status}</code>.\n\n<b>Recent Logs:</b>\n<code>{html.escape(logs)}</code>", message.chat.id, status_msg.message_id)
@@ -833,15 +843,22 @@ def redeploy_callback(call):
     
     bot.answer_callback_query(call.id, "🔄 Redeploying container...")
     
-    success, new_container_id = shell_worker.rebuild_container(user_id, codebase_id)
+    # Get existing port
+    db = state_manager.load_db()
+    assigned_port = None
+    for cont_id, data in db["containers"].items():
+        if data["codebase_id"] == codebase_id:
+            assigned_port = data.get("port")
+            break
+    
+    success, new_container_id = shell_worker.rebuild_container(user_id, codebase_id, port=assigned_port)
     if success:
         # Update state manager
-        db = state_manager.load_db()
         for cont_id, data in list(db["containers"].items()):
             if data["codebase_id"] == codebase_id:
                 state_manager.remove_container(cont_id)
                 
-        state_manager.add_container(user_id, new_container_id, codebase_id)
+        state_manager.add_container(user_id, new_container_id, codebase_id, port=assigned_port)
         bot.answer_callback_query(call.id, "✅ Application redeployed successfully.", show_alert=True)
         manage_app_callback(call, code_id=codebase_id)
     else:

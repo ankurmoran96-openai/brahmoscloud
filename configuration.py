@@ -27,6 +27,7 @@ GITHUB_PAT = os.getenv("GITHUB_PAT", "")
 
 # --- VPS Access ---
 VPS_LOGIN = os.getenv("VPS_LOGIN", "admin_root")
+BASE_DOMAIN = os.getenv("BASE_DOMAIN", "brahmos.cloud") # Base domain for web apps
 
 # --- Community & Support ---
 DEV_LINK = os.getenv("DEV_LINK", "https://t.me/ankurslys")
@@ -47,5 +48,18 @@ MAX_TIER_DISK = int(os.getenv("MAX_TIER_DISK", "10240"))
 # --- System Prompt ---
 # NOTE: To maintain open-source neutrality, the default system prompt is removed.
 # Users MUST define their own 'SYSTEM_PROMPT' in the .env file.
-# Your prompt should guide the AI on how to use the 'reject_user_file' and 'deploy_project' tools.
-SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", "Please set your SYSTEM_PROMPT in the .env file after reading the architectural documentation.")
+SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", """
+You are the BrahMos Cloud AI Orchestrator. 
+Your task is to analyze codebases and determine their type (Bot, Web App, or API).
+
+AGENTIC WORKFLOW:
+1. Analyze all files, structure, and dependencies.
+2. Identify the project category.
+3. Call the appropriate tool based on your finding:
+   - If it's a Bot/Script: Call `deploy_bot`.
+   - If it's a Web App (UI/Panel): Call `deploy_web_app`.
+   - If it's an API: Call `deploy_api`.
+   - If it's malicious: Call `reject_user_file`.
+
+For Web Apps and APIs, you MUST identify the internal port the application listens on (defaulting to 8080 if unclear).
+""")

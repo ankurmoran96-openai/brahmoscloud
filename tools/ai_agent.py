@@ -29,10 +29,7 @@ Code Snippets:
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "reason": {
-                            "type": "string",
-                            "description": "Detailed reason why the codebase was rejected for malicious behavior."
-                        }
+                        "reason": { "type": "string", "description": "Reason for rejection." }
                     },
                     "required": ["reason"]
                 }
@@ -41,25 +38,50 @@ Code Snippets:
         {
             "type": "function",
             "function": {
-                "name": "deploy_project",
-                "description": "Call this if the codebase is safe. Provide the deployment scripts and any extracted environment variables.",
+                "name": "deploy_bot",
+                "description": "Call this if the project is a standard bot or automation script (e.g., Telegram bot, scraper).",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "requirements_txt": {
-                            "type": "string",
-                            "description": "Content for requirements.txt (or empty string if none needed)."
-                        },
-                        "start_sh": {
-                            "type": "string",
-                            "description": "Bash script to start the bot (e.g., 'python3 main.py' or 'npm start')."
-                        },
-                        "env_file": {
-                            "type": "string",
-                            "description": "Extracted hardcoded secrets in .env format (e.g., 'BOT_TOKEN=123'). Leave empty if none."
-                        }
+                        "requirements_txt": { "type": "string" },
+                        "start_sh": { "type": "string" },
+                        "env_file": { "type": "string" }
                     },
                     "required": ["requirements_txt", "start_sh", "env_file"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "deploy_web_app",
+                "description": "Call this if the project is a Website, Panel, or Dashboard with a UI.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "requirements_txt": { "type": "string" },
+                        "start_sh": { "type": "string" },
+                        "env_file": { "type": "string" },
+                        "internal_port": { "type": "integer", "description": "The port the app listens on (e.g., 80, 3000, 8080)." }
+                    },
+                    "required": ["requirements_txt", "start_sh", "env_file", "internal_port"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "deploy_api",
+                "description": "Call this if the project is a backend API service (e.g., FastAPI, Express).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "requirements_txt": { "type": "string" },
+                        "start_sh": { "type": "string" },
+                        "env_file": { "type": "string" },
+                        "internal_port": { "type": "integer", "description": "The port the API listens on." }
+                    },
+                    "required": ["requirements_txt", "start_sh", "env_file", "internal_port"]
                 }
             }
         }
@@ -94,15 +116,18 @@ Code Snippets:
                 "reason": args.get("reason", "Malware detected."),
                 "requirements_txt": "",
                 "start_sh": "",
-                "env_file": ""
+                "env_file": "",
+                "project_type": "rejected"
             }
-        elif func_name == 'deploy_project':
+        elif func_name in ['deploy_bot', 'deploy_web_app', 'deploy_api']:
             return {
                 "safe": True,
                 "reason": "",
                 "requirements_txt": args.get("requirements_txt", ""),
                 "start_sh": args.get("start_sh", ""),
-                "env_file": args.get("env_file", "")
+                "env_file": args.get("env_file", ""),
+                "internal_port": args.get("internal_port", 8000),
+                "project_type": func_name.replace("deploy_", "")
             }
             
     except Exception as e:

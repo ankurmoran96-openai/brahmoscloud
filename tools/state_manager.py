@@ -60,7 +60,7 @@ def update_user_premium(user_id, days, tier="pro"):
     save_db(db)
     return True
 
-def add_container(user_id, container_id, codebase_id):
+def add_container(user_id, container_id, codebase_id, port=None):
     db = load_db()
     user_id_str = str(user_id)
     if user_id_str not in db["users"]:
@@ -71,9 +71,21 @@ def add_container(user_id, container_id, codebase_id):
     db["containers"][container_id] = {
         "user_id": user_id,
         "codebase_id": codebase_id,
-        "status": "running"
+        "status": "running",
+        "port": port
     }
     save_db(db)
+
+def get_next_available_port():
+    db = load_db()
+    assigned_ports = [c.get("port") for c in db["containers"].values() if c.get("port")]
+    
+    # Start range from 10000
+    current_port = 10000
+    while current_port in assigned_ports:
+        current_port += 1
+    
+    return current_port
 
 def get_user_projects(user_id):
     db = load_db()

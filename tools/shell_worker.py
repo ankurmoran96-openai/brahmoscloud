@@ -33,12 +33,12 @@ CMD ["./start.sh"]
 
 STORAGE_BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'storage'))
 
-def deploy_project(user_id, directory, codebase_id):
+def deploy_project(user_id, directory, codebase_id, port=None):
     # 1. Prepare persistent storage
     user_storage = os.path.join(STORAGE_BASE, str(user_id), codebase_id)
     os.makedirs(user_storage, exist_ok=True)
     
-    # 2. Copy files to persistent storage (excluding Dockerfile if we generate it there)
+    # 2. Copy files to persistent storage
     for item in os.listdir(directory):
         s = os.path.join(directory, item)
         d = os.path.join(user_storage, item)
@@ -72,12 +72,18 @@ def deploy_project(user_id, directory, codebase_id):
             pass
             
         # Run Container
-        print(f"Starting container {container_name}...")
+        print(f"Starting container {container_name} with port mapping...")
+        
+        # Setup port mapping if provided
+        # We assume the container listens on port 8000 internally for simplicity
+        ports_config = { '8000/tcp': port } if port else None
+        
         container = client.containers.run(
             image_tag,
             detach=True,
             name=container_name,
             mem_limit=f"{config.FREE_TIER_RAM}m",
+            ports=ports_config,
             restart_policy={"Name": "always"}
         )
         
@@ -115,7 +121,7 @@ def remove_container_physical(container_id):
     except Exception:
         return False
 
-def rebuild_container(user_id, codebase_id):
+def rebuild_container(user_id, codebase_id, port=None):
     user_storage = os.path.join(STORAGE_BASE, str(user_id), codebase_id)
     if not os.path.exists(user_storage):
         return False, "Project storage not found"
@@ -134,12 +140,15 @@ def rebuild_container(user_id, codebase_id):
         except docker.errors.NotFound:
             pass
             
-        print(f"Starting container {container_name}...")
+        print(f"Starting container {container_name} with port {port}...")
+        ports_config = { '8000/tcp': port } if port else None
+        
         container = client.containers.run(
             image_tag,
             detach=True,
             name=container_name,
             mem_limit=f"{config.FREE_TIER_RAM}m",
+            ports=ports_config,
             restart_policy={"Name": "always"}
         )
         return True, container.id

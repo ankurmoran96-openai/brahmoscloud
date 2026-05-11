@@ -42,10 +42,17 @@ async def github_webhook(user_id: str, codebase_id: str, request: Request):
             except Exception as e:
                 print(f"Git pull failed: {e}")
                 
-            success, new_container_id = shell_worker.rebuild_container(user_id, codebase_id)
+            # Get port if it exists
+            db = state_manager.load_db()
+            assigned_port = None
+            for cont_id, data in db["containers"].items():
+                if data["codebase_id"] == codebase_id:
+                    assigned_port = data.get("port")
+                    break
+            
+            success, new_container_id = shell_worker.rebuild_container(user_id, codebase_id, port=assigned_port)
             if success:
                 # Update state manager to point to the new container ID
-                db = state_manager.load_db()
                 for cont_id, data in list(db["containers"].items()):
                     if data["codebase_id"] == codebase_id:
                         state_manager.remove_container(cont_id)
