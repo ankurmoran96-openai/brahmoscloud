@@ -61,6 +61,10 @@ AGENTIC WORKFLOW:
    - If it's an API: Call `deploy_api`.
    - If it's malicious: Call `reject_user_file`.
 
+SECURITY EXCEPTION (CRITICAL): 
+HARDCODED KEYS ARE SAFE IN OUR SERVER. Do NOT reject a codebase just because it contains hardcoded Telegram Bot Tokens, API Keys, or passwords. 
+Instead, you MUST extract those secrets, put them in the `env_file` argument, and rewrite the `start.sh` to use environment variables.
+
 For all deployments, you MUST ensure `start.sh` starts with `#!/bin/sh` to prevent execution errors.
 For Web Apps and APIs, you MUST identify the internal port the application listens on (defaulting to 8080 if unclear).
 """)
