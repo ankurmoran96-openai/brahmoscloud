@@ -59,7 +59,7 @@ def check_membership(user_id):
 
 # --- Deployment Logic ---
 
-def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None):
+def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, project_name=None):
     user_id = message.from_user.id
     user_state = state_manager.get_user(user_id)
     is_admin = (user_id == config.ADMIN_ID)
@@ -127,7 +127,7 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None):
         dep_success, container_id = shell_worker.deploy_project(user_id, temp_dir, codebase_id, port=assigned_port)
         
         if dep_success:
-            state_manager.add_container(user_id, container_id, codebase_id, port=assigned_port)
+            state_manager.add_container(user_id, container_id, codebase_id, port=assigned_port, project_name=project_name)
             
             # Post-deployment check
             import time
@@ -217,6 +217,19 @@ Deploy and manage your lightweight bots or web apps directly from Telegram. Our 
     else:
         bot.send_message(chat_id, caption, reply_markup=get_start_keyboard(user_id))
 
+# --- Deployment Handlers ---
+
+def set_project_name_step(message, repo_url=None, zip_path=None, custom_pat=None):
+    project_name = message.text.strip()
+    if len(project_name) < 3:
+        project_name = None # Fallback to default
+        
+    process_deployment(message, repo_url=repo_url, zip_path=zip_path, custom_pat=custom_pat, project_name=project_name)
+
+def start_naming_flow(message, repo_url=None, zip_path=None, custom_pat=None):
+    msg = bot.reply_to(message, "📝 <b>Set Project Name:</b>\n━━━━━━━━━━━━━━━━━━━━━━\nPlease send a name for your new application (e.g., <code>My Website</code>).")
+    bot.register_next_step_handler(msg, set_project_name_step, repo_url=repo_url, zip_path=zip_path, custom_pat=custom_pat)
+
 @bot.message_handler(commands=['deploy'])
 def deploy_command_manual(message):
     try:
@@ -230,7 +243,7 @@ def deploy_command_manual(message):
     
     repo_url = args[1]
     pat_token = args[2] if len(args) > 2 else None
-    process_deployment(message, repo_url=repo_url, custom_pat=pat_token)
+    start_naming_flow(message, repo_url=repo_url, custom_pat=pat_token)
 
 @bot.message_handler(commands=['addpremium'])
 def add_premium_admin(message):
@@ -327,7 +340,7 @@ def handle_github_url(message):
         bot.set_message_reaction(message.chat.id, message.message_id, [types.ReactionTypeEmoji("🚀")])
     except Exception:
         pass
-    process_deployment(message, repo_url=message.text.strip())
+    start_naming_flow(message, repo_url=message.text.strip())
 
 @bot.message_handler(content_types=['document'])
 def handle_zip(message):
@@ -344,8 +357,7 @@ def handle_zip(message):
         with open(temp_zip, 'wb') as f:
             f.write(downloaded_file)
             
-        process_deployment(message, zip_path=temp_zip)
-        os.remove(temp_zip)
+        start_naming_flow(message, zip_path=temp_zip)
 
 # --- Callbacks ---
 
@@ -487,10 +499,11 @@ def manage_app_callback(call, code_id=None):
             ram_usage_text = "Error fetching stats"
             runtime_text = "Unknown"
 
-    text = f"""🛠 <b>Manage Project: {codebase_id}</b>
+    text = f"""🛠 <b>Manage Project: {proj['project_name']}</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 <b>Status:</b> {status} {status_emoji}
 <b>Runtime:</b> <code>{runtime_text}</code>
+<b>Project ID:</b> <code>{codebase_id}</code>
 <b>Container ID:</b> <code>{container_id[:12]}</code>
 
 ⚡ <b>Resources:</b>
@@ -508,12 +521,13 @@ Choose an action below to control your application."""
     btn_redeploy = types.InlineKeyboardButton("🔄 Redeploy", callback_data=f"redeploy_{codebase_id}")
     btn_delete = types.InlineKeyboardButton("🗑 Delete", callback_data=f"delete_{codebase_id}")
     btn_logs = types.InlineKeyboardButton("📋 View Logs", callback_data=f"logs_{codebase_id}")
+    btn_rename = types.InlineKeyboardButton("✏️ Rename", callback_data=f"rename_{codebase_id}")
     btn_domain = types.InlineKeyboardButton("🌐 Custom Domain", callback_data=f"domain_{codebase_id}")
     btn_back = types.InlineKeyboardButton("⬅️ Back to My Apps", callback_data="my_apps")
     
     markup.row(btn_action, btn_redeploy)
     markup.row(btn_logs, btn_delete)
-    markup.row(btn_domain)
+    markup.row(btn_rename, btn_domain)
     markup.row(btn_back)
     
     try:
@@ -669,9 +683,9 @@ Select a project to manage its status or deploy a new application.\n\n"""
         for proj in projects:
             status_emoji = "🟢" if proj['status'] == 'running' else "🔴"
             code_id = proj['codebase_id']
-            dir_id = proj['container_id'][:12]
-            text += f"• {status_emoji} <b>Project:</b> <code>{code_id}</code> | <b>Dir ID:</b> <code>{dir_id}</code>\n"
-            proj_buttons.append(types.InlineKeyboardButton(f"⚙️ {code_id}", callback_data=f"manage_{code_id}"))
+            proj_name = proj.get('project_name', f"Project-{code_id}")
+            text += f"• {status_emoji} <b>{proj_name}</b> (<code>{code_id}</code>)\n"
+            proj_buttons.append(types.InlineKeyboardButton(f"⚙️ {proj_name}", callback_data=f"manage_{code_id}"))
 
         
         # Grid layout: 2 buttons per row
@@ -821,6 +835,27 @@ Upload a <code>.zip</code> file containing your project's source code.
         bot.edit_message_caption(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
     except Exception:
         bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("rename_"))
+def rename_app_callback(call):
+    codebase_id = call.data.replace("rename_", "")
+    bot.answer_callback_query(call.id)
+    
+    msg = bot.reply_to(call.message, f"📝 <b>Rename Project:</b> <code>{codebase_id}</code>\n━━━━━━━━━━━━━━━━━━━━━━\nPlease send the new name for this project.")
+    bot.register_next_step_handler(msg, set_new_name_step, codebase_id=codebase_id)
+
+def set_new_name_step(message, codebase_id):
+    new_name = message.text.strip()
+    user_id = message.from_user.id
+    
+    proj = state_manager.get_container_by_codebase(user_id, codebase_id)
+    if proj:
+        if state_manager.update_project_name(proj['container_id'], new_name):
+            bot.reply_to(message, f"✅ Project renamed to: <b>{escape_html(new_name)}</b>")
+        else:
+            bot.reply_to(message, "❌ Failed to rename project.")
+    else:
+        bot.reply_to(message, "❌ Project not found.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("logs_"))
 def view_logs_callback(call):

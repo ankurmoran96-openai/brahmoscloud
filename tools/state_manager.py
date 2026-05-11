@@ -60,7 +60,7 @@ def update_user_premium(user_id, days, tier="pro"):
     save_db(db)
     return True
 
-def add_container(user_id, container_id, codebase_id, port=None):
+def add_container(user_id, container_id, codebase_id, port=None, project_name=None):
     db = load_db()
     user_id_str = str(user_id)
     if user_id_str not in db["users"]:
@@ -71,10 +71,19 @@ def add_container(user_id, container_id, codebase_id, port=None):
     db["containers"][container_id] = {
         "user_id": user_id,
         "codebase_id": codebase_id,
+        "project_name": project_name or f"Project-{codebase_id}",
         "status": "running",
         "port": port
     }
     save_db(db)
+
+def update_project_name(container_id, new_name):
+    db = load_db()
+    if container_id in db["containers"]:
+        db["containers"][container_id]["project_name"] = new_name
+        save_db(db)
+        return True
+    return False
 
 def get_next_available_port():
     db = load_db()
