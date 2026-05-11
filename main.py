@@ -18,6 +18,29 @@ bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode='HTML')
 def escape_html(text):
     return html.escape(str(text))
 
+def smart_respond(message, text, markup=None, edit=False):
+    """
+    Unified responder that always tries to attach banner.jpg.
+    If edit=True, it updates the existing message (caption or text).
+    """
+    chat_id = message.chat.id if hasattr(message, 'chat') else message.message.chat.id
+    message_id = message.message_id if hasattr(message, 'message_id') else message.message.message_id if hasattr(message, 'message') else None
+    
+    banner_path = os.path.join(os.path.dirname(__file__), 'banner.jpg')
+    has_banner = os.path.exists(banner_path)
+
+    if edit and message_id:
+        try:
+            return bot.edit_message_caption(text, chat_id, message_id, reply_markup=markup)
+        except Exception:
+            return bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
+    else:
+        if has_banner:
+            with open(banner_path, 'rb') as photo:
+                return bot.send_photo(chat_id, photo, caption=text, reply_markup=markup)
+        else:
+            return bot.send_message(chat_id, text, reply_markup=markup)
+
 def get_start_keyboard(user_id=None):
     markup = types.InlineKeyboardMarkup()
     
@@ -175,17 +198,12 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, p
 
 @bot.message_handler(commands=['start'])
 def start_command(message, edit=False):
-    # Support both Message and CallbackQuery objects
-    is_callback = hasattr(message, 'message')
     target_user = message.from_user
-    chat_id = message.message.chat.id if is_callback else message.chat.id
-    message_id = message.message.message_id if is_callback else None
-
-    first_name = escape_html(target_user.first_name)
     user_id = target_user.id
+    first_name = escape_html(target_user.first_name)
     
     if not check_membership(user_id):
-        caption = f"""<b>🛑 Access Restricted</b>
+        text = f"""<b>🛑 Access Restricted</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 Welcome! To utilize the powerful features of <b>BrahMos Cloud</b>, you must first become a verified member of our community.
 
@@ -194,36 +212,28 @@ Welcome! To utilize the powerful features of <b>BrahMos Cloud</b>, you must firs
 2️⃣ Click the verify button below.
 
 <i>This ensures a secure and dedicated environment for all our users.</i>"""
-        if edit and message_id:
-            try:
-                return bot.edit_message_caption(caption, chat_id, message_id, reply_markup=get_join_keyboard())
-            except Exception:
-                return bot.edit_message_text(caption, chat_id, message_id, reply_markup=get_join_keyboard())
-        return bot.send_message(chat_id, caption, reply_markup=get_join_keyboard())
+        return smart_respond(message, text, markup=get_join_keyboard(), edit=edit)
 
-    caption = f"""🚀 <b>BrahMos Cloud PaaS</b>
+    text = f"""🚀 <b>BrahMos Cloud: The Intelligent PaaS</b>
 ━━━━━━━━━━━━━━━━━━━━━━
-Welcome, <a href="tg://user?id={user_id}">{first_name}</a>! 👋
+Welcome to the future of cloud hosting, <b>{first_name}</b>! 👋
 
-Deploy and manage your lightweight bots or web apps directly from Telegram. Our AI-driven security layer ensures your code is safe and optimized for hosting.
+<b>BrahMos Cloud</b> is a high-performance Platform as a Service designed to help you launch bots, websites, and APIs in seconds. Powered by advanced AI security, we ensure your code is safe and always online.
 
-⚡ <b>System Status:</b> <code>Functional 🟢</code>
-🛡 <b>Security:</b> <code>Active 🛡</code>
+⚡ <b>Infrastructure Status:</b>
+• <b>Core System:</b> <code>Operational 🟢</code>
+• <b>AI Security:</b> <code>Shield Active 🛡️</code>
+• <b>Docker Engine:</b> <code>Ready 🐳</code>
 
-⚠️ <b>Notice:</b> <i>Users are responsible for their own backups. We are not responsible for any data loss.</i>"""
+📂 <b>Getting Started:</b>
+Simply send a <b>GitHub Repository URL</b> or upload a <b>ZIP file</b>. Our AI will automatically analyze your project and deploy it instantly.
+
+⚠️ <b>Notice:</b> <i>Users are responsible for their own backups. We are not responsible for any data loss.</i>
+
+━━━━━━━━━━━━━━━━━━━━━━
+<i>Manage your cloud ecosystem using the buttons below.</i>"""
     
-    if edit and message_id:
-        try:
-            return bot.edit_message_caption(caption, chat_id, message_id, reply_markup=get_start_keyboard(user_id))
-        except Exception:
-            return bot.edit_message_text(caption, chat_id, message_id, reply_markup=get_start_keyboard(user_id))
-
-    banner_path = os.path.join(os.path.dirname(__file__), 'banner.jpg')
-    if os.path.exists(banner_path):
-        with open(banner_path, 'rb') as photo:
-            bot.send_photo(chat_id, photo, caption=caption, reply_markup=get_start_keyboard(user_id))
-    else:
-        bot.send_message(chat_id, caption, reply_markup=get_start_keyboard(user_id))
+    return smart_respond(message, text, markup=get_start_keyboard(user_id), edit=edit)
 
 # --- Deployment Handlers ---
 
@@ -235,7 +245,8 @@ def set_project_name_step(message, repo_url=None, zip_path=None, custom_pat=None
     process_deployment(message, repo_url=repo_url, zip_path=zip_path, custom_pat=custom_pat, project_name=project_name)
 
 def start_naming_flow(message, repo_url=None, zip_path=None, custom_pat=None):
-    msg = bot.reply_to(message, "📝 <b>Set Project Name:</b>\n━━━━━━━━━━━━━━━━━━━━━━\nPlease send a name for your new application (e.g., <code>My Website</code>).")
+    text = "📝 <b>Set Project Name:</b>\n━━━━━━━━━━━━━━━━━━━━━━\nPlease send a name for your new application (e.g., <code>My Website</code>)."
+    msg = smart_respond(message, text)
     bot.register_next_step_handler(msg, set_project_name_step, repo_url=repo_url, zip_path=zip_path, custom_pat=custom_pat)
 
 @bot.message_handler(commands=['deploy'])
@@ -247,7 +258,8 @@ def deploy_command_manual(message):
         
     args = message.text.split()
     if len(args) < 2:
-        return bot.reply_to(message, "⚠️ <b>Usage:</b> <code>/deploy &lt;github_url&gt; [pat_token]</code>\n\n<i>Note: PAT token is only required for private repositories.</i>")
+        text = "⚠️ <b>Usage:</b> <code>/deploy &lt;github_url&gt; [pat_token]</code>\n\n<i>Note: PAT token is only required for private repositories.</i>"
+        return smart_respond(message, text)
     
     repo_url = args[1]
     pat_token = args[2] if len(args) > 2 else None
@@ -260,17 +272,18 @@ def add_premium_admin(message):
     
     args = message.text.split()
     if len(args) < 3:
-        return bot.reply_to(message, "⚠️ <b>Usage:</b> <code>/addpremium &lt;user_id&gt; &lt;days&gt; [tier: pro/max]</code>")
+        text = "⚠️ <b>Usage:</b> <code>/addpremium &lt;user_id&gt; &lt;days&gt; [tier: pro/max]</code>"
+        return smart_respond(message, text)
     
     target_id = args[1]
     try:
         days = int(args[2])
     except ValueError:
-        return bot.reply_to(message, "❌ Invalid days provided.")
+        return smart_respond(message, "❌ Invalid days provided.")
         
     tier = args[3].lower() if len(args) > 3 else "pro"
     if tier not in ["pro", "max"]:
-        return bot.reply_to(message, "❌ Invalid tier. Use 'pro' or 'max'.")
+        return smart_respond(message, "❌ Invalid tier. Use 'pro' or 'max'.")
 
     if state_manager.update_user_premium(target_id, days, tier=tier):
         bot.reply_to(message, f"✅ User <code>{target_id}</code> now has <b>{tier.upper()}</b> access for {days} days.")
@@ -279,7 +292,7 @@ def add_premium_admin(message):
         except Exception:
             pass
     else:
-        bot.reply_to(message, "❌ Failed to update premium status.")
+        smart_respond(message, "❌ Failed to update premium status.")
 
 @bot.message_handler(commands=['rempremium'])
 def rem_premium_admin(message):
@@ -288,7 +301,8 @@ def rem_premium_admin(message):
     
     args = message.text.split()
     if len(args) < 2:
-        return bot.reply_to(message, "⚠️ <b>Usage:</b> <code>/rempremium &lt;user_id&gt;</code>")
+        text = "⚠️ <b>Usage:</b> <code>/rempremium &lt;user_id&gt;</code>"
+        return smart_respond(message, text)
     
     target_id = args[1]
     if state_manager.update_user_premium(target_id, 0):
@@ -298,7 +312,7 @@ def rem_premium_admin(message):
         except Exception:
             pass
     else:
-        bot.reply_to(message, "❌ Failed to remove premium.")
+        smart_respond(message, "❌ Failed to remove premium.")
 
 @bot.message_handler(commands=['listusers'])
 def list_users_admin(message):
@@ -309,7 +323,7 @@ def list_users_admin(message):
 
     users = state_manager.get_all_users()
     if not users:
-        return bot.reply_to(message, "📂 <b>No users found in database.</b>")
+        return smart_respond(message, "📂 <b>No users found in database.</b>")
 
     text = "👑 <b>Admin: User & File Audit</b>\n━━━━━━━━━━━━━━━━━━━━━━\n"
     
@@ -340,7 +354,7 @@ def list_users_admin(message):
         for x in range(0, len(text), 4000):
             bot.send_message(message.chat.id, text[x:x+4000])
     else:
-        bot.reply_to(message, text)
+        smart_respond(message, text)
 
 @bot.message_handler(func=lambda message: message.text and "github.com" in message.text)
 def handle_github_url(message):
@@ -392,28 +406,7 @@ def stats_command_admin(message):
 ⚙️ <b>Server Identity:</b> <code>{config.VPS_LOGIN}</code>
 
 <i>Monitoring system performance...</i>"""
-    bot.reply_to(message, text)
-
-@bot.message_handler(commands=['admincmd', 'adminhelp'])
-def admin_help_command(message):
-    if message.from_user.id != config.ADMIN_ID:
-        return
-    
-    help_text = """👑 <b>Admin Intelligence Manual</b>
-━━━━━━━━━━━━━━━━━━━━━━
-Master your VPS infrastructure with these commands:
-
-<b>👤 User Management</b>
-• <code>/addpremium &lt;user_id&gt; &lt;days&gt; [pro/max]</code> - Grant access.
-• <code>/rempremium &lt;user_id&gt;</code> - Revoke PRO access.
-• <code>/listusers</code> - Audit all users and their files.
-
-<b>📊 System Oversight</b>
-• <code>/stats</code> - View global system usage.
-• <code>/admin</code> or <code>/addcmd</code> - Open the UI Control Panel.
-
-<i>Use these tools responsibly to manage BrahMos Cloud.</i>"""
-    bot.reply_to(message, help_text)
+    smart_respond(message, text)
 
 @bot.message_handler(commands=['addcmd', 'admin'])
 def addcmd_admin(message):
@@ -426,7 +419,7 @@ def addcmd_admin(message):
     markup.row(types.InlineKeyboardButton("📋 List All Users", callback_data="admin_list_users"),
                types.InlineKeyboardButton("📊 System Stats", callback_data="admin_view_stats"))
     
-    bot.send_message(message.chat.id, text, reply_markup=markup)
+    smart_respond(message, text, markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "admin_list_users")
 def admin_list_users_callback(call):
@@ -538,29 +531,26 @@ Choose an action below to control your application."""
     markup.row(btn_rename, btn_domain)
     markup.row(btn_back)
     
-    try:
-        bot.edit_message_caption(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
-    except Exception:
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+    smart_respond(call, text, markup=markup, edit=True)
 
 @bot.message_handler(commands=['stop'])
 def stop_command_manual(message):
     args = message.text.split()
     if len(args) < 2:
-        return bot.reply_to(message, "Usage: /stop [app_id]")
+        return smart_respond(message, "Usage: /stop [app_id]")
     
     app_id = args[1]
     user_id = message.from_user.id
     proj = state_manager.get_container_by_codebase(user_id, app_id)
             
     if not proj:
-        return bot.reply_to(message, "❌ Application not found.")
+        return smart_respond(message, "❌ Application not found.")
         
     if shell_worker.stop_container(proj['container_id']):
         state_manager.update_container_status(proj['container_id'], "stopped")
-        bot.reply_to(message, f"✅ Application <code>{app_id}</code> has been stopped.")
+        smart_respond(message, f"✅ Application <code>{app_id}</code> has been stopped.")
     else:
-        bot.reply_to(message, "❌ Failed to stop container.")
+        smart_respond(message, "❌ Failed to stop container.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("delete_"))
 def delete_app_callback(call):
@@ -570,7 +560,7 @@ def delete_app_callback(call):
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
     
     if not proj:
-        return bot.send_message(call.message.chat.id, "❌ Project not found.")
+        return smart_respond(call, "❌ Project not found.")
         
     if shell_worker.remove_container_physical(proj['container_id']):
         path = os.path.join(shell_worker.STORAGE_BASE, str(user_id), codebase_id)
@@ -582,7 +572,7 @@ def delete_app_callback(call):
         bot.answer_callback_query(call.id, "✅ Application deleted successfully.", show_alert=True)
         my_apps_callback(call)
     else:
-        bot.answer_callback_query(call.id, "❌ Failed to delete container.", show_alert=True)
+        smart_respond(call, "❌ Failed to delete container.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
 def stop_app_callback(call):
@@ -592,14 +582,14 @@ def stop_app_callback(call):
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
     
     if not proj:
-        return bot.send_message(call.message.chat.id, "❌ Project not found.")
+        return smart_respond(call, "❌ Project not found.")
         
     if shell_worker.stop_container(proj['container_id']):
         state_manager.update_container_status(proj['container_id'], "stopped")
         bot.send_message(call.message.chat.id, "✅ Application stopped.")
         manage_app_callback(call, code_id=codebase_id)
     else:
-        bot.send_message(call.message.chat.id, "❌ Failed to stop container.")
+        smart_respond(call, "❌ Failed to stop container.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("start_"))
 def start_app_callback(call):
@@ -609,14 +599,14 @@ def start_app_callback(call):
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
     
     if not proj:
-        return bot.send_message(call.message.chat.id, "❌ Project not found.")
+        return smart_respond(call, "❌ Project not found.")
         
     if shell_worker.start_container(proj['container_id']):
         state_manager.update_container_status(proj['container_id'], "running")
         bot.send_message(call.message.chat.id, "✅ Application started.")
         manage_app_callback(call, code_id=codebase_id)
     else:
-        bot.send_message(call.message.chat.id, "❌ Failed to start container.")
+        smart_respond(call, "❌ Failed to start container.")
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_start")
 def back_start_callback(call):
@@ -643,10 +633,7 @@ def help_menu_callback(call):
     markup = types.InlineKeyboardMarkup()
     markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
     
-    try:
-        bot.edit_message_caption(help_text, call.message.chat.id, call.message.message_id, reply_markup=markup)
-    except Exception:
-        bot.edit_message_text(help_text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+    smart_respond(call, help_text, markup=markup, edit=True)
 
 @bot.message_handler(commands=['myapps', 'apps'])
 def myapps_command(message):
@@ -666,8 +653,6 @@ def my_apps_callback(call):
     # Handle both message and callback objects
     is_callback = hasattr(call, 'message')
     user_id = call.from_user.id
-    chat_id = call.message.chat.id if is_callback else call.chat.id
-    message_id = call.message.message_id if is_callback else None
 
     if is_callback:
         bot.answer_callback_query(call.id)
@@ -702,24 +687,13 @@ Select a project to manage its status or deploy a new application.\n\n"""
                 
     markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
     
-    try:
-        if is_callback:
-            try:
-                bot.edit_message_caption(text, chat_id, message_id, reply_markup=markup)
-            except Exception:
-                bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
-        else:
-            bot.send_message(chat_id, text, reply_markup=markup)
-    except Exception as e:
-        print(f"Error in my_apps view: {e}")
+    smart_respond(call, text, markup=markup, edit=is_callback)
 
 @bot.callback_query_handler(func=lambda call: call.data == "account_info")
 def account_info_callback(call):
     # Handle both message and callback objects
     is_callback = hasattr(call, 'message')
     user_id = call.from_user.id
-    chat_id = call.message.chat.id if is_callback else call.chat.id
-    message_id = call.message.message_id if is_callback else None
 
     if is_callback:
         bot.answer_callback_query(call.id)
@@ -758,23 +732,12 @@ def account_info_callback(call):
     markup.row(types.InlineKeyboardButton("💎 Premium Plans", callback_data="view_plans"))
     markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
     
-    try:
-        if is_callback:
-            try:
-                bot.edit_message_caption(text, chat_id, message_id, reply_markup=markup)
-            except Exception:
-                bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
-        else:
-            bot.send_message(chat_id, text, reply_markup=markup)
-    except Exception as e:
-        print(f"Error in account info view: {e}")
+    smart_respond(call, text, markup=markup, edit=is_callback)
 
 @bot.callback_query_handler(func=lambda call: call.data == "view_plans")
 def view_plans_callback(call):
     # Handle both message and callback objects
     is_callback = hasattr(call, 'message')
-    chat_id = call.message.chat.id if is_callback else call.chat.id
-    message_id = call.message.message_id if is_callback else None
 
     if is_callback:
         bot.answer_callback_query(call.id)
@@ -806,16 +769,7 @@ Upgrade your hosting experience with our powerful <b>PRO</b> & <b>MAX</b> tiers.
     markup = types.InlineKeyboardMarkup()
     markup.row(types.InlineKeyboardButton("⬅️ Back to Account", callback_data="account_info"))
     
-    try:
-        if is_callback:
-            try:
-                bot.edit_message_caption(text, chat_id, message_id, reply_markup=markup)
-            except Exception:
-                bot.edit_message_text(text, chat_id, message_id, reply_markup=markup)
-        else:
-            bot.send_message(chat_id, text, reply_markup=markup)
-    except Exception as e:
-        print(f"Error in plans view: {e}")
+    smart_respond(call, text, markup=markup, edit=is_callback)
 
 @bot.callback_query_handler(func=lambda call: call.data == "deploy_menu")
 def deploy_menu_callback(call):
@@ -833,20 +787,17 @@ Upload a <code>.zip</code> file containing your project's source code.
 <i>Our AI will automatically scan your files, create a <code>start.sh</code>, and deploy your container in seconds.</i>"""
 
     markup = types.InlineKeyboardMarkup()
-    markup.row(types.InlineKeyboardButton("⬅️ Back", callback_data="back_start"))
+    markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
 
-    
-    try:
-        bot.edit_message_caption(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
-    except Exception:
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+    smart_respond(call, text, markup=markup, edit=True)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("rename_"))
 def rename_app_callback(call):
     codebase_id = call.data.replace("rename_", "")
     bot.answer_callback_query(call.id)
     
-    msg = bot.reply_to(call.message, f"📝 <b>Rename Project:</b> <code>{codebase_id}</code>\n━━━━━━━━━━━━━━━━━━━━━━\nPlease send the new name for this project.")
+    text = f"📝 <b>Rename Project:</b> <code>{codebase_id}</code>\n━━━━━━━━━━━━━━━━━━━━━━\nPlease send the new name for this project."
+    msg = smart_respond(call, text)
     bot.register_next_step_handler(msg, set_new_name_step, codebase_id=codebase_id)
 
 def set_new_name_step(message, codebase_id):
@@ -856,11 +807,11 @@ def set_new_name_step(message, codebase_id):
     proj = state_manager.get_container_by_codebase(user_id, codebase_id)
     if proj:
         if state_manager.update_project_name(proj['container_id'], new_name):
-            bot.reply_to(message, f"✅ Project renamed to: <b>{escape_html(new_name)}</b>")
+            smart_respond(message, f"✅ Project renamed to: <b>{escape_html(new_name)}</b>")
         else:
-            bot.reply_to(message, "❌ Failed to rename project.")
+            smart_respond(message, "❌ Failed to rename project.")
     else:
-        bot.reply_to(message, "❌ Project not found.")
+        smart_respond(message, "❌ Project not found.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("logs_"))
 def view_logs_callback(call):
@@ -882,7 +833,7 @@ def view_logs_callback(call):
             logs = "No recent logs found."
             
         text = f"📋 <b>Recent Logs ({codebase_id}):</b>\n<code>\n{logs}\n</code>"
-        bot.send_message(call.message.chat.id, text)
+        smart_respond(call, text)
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
@@ -913,10 +864,7 @@ Enable the <b>Proxy (Orange Cloud)</b> in Cloudflare. This hides your VPS IP and
     markup = types.InlineKeyboardMarkup()
     markup.row(types.InlineKeyboardButton("⬅️ Back", callback_data=f"manage_{codebase_id}"))
     
-    try:
-        bot.edit_message_caption(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
-    except Exception:
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+    smart_respond(call, text, markup=markup, edit=True)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("redeploy_"))
 def redeploy_callback(call):
@@ -944,6 +892,27 @@ def redeploy_callback(call):
         manage_app_callback(call, code_id=codebase_id)
     else:
         bot.answer_callback_query(call.id, f"❌ Failed to redeploy container.", show_alert=True)
+
+@bot.message_handler(commands=['admincmd', 'adminhelp'])
+def admin_help_command(message):
+    if message.from_user.id != config.ADMIN_ID:
+        return
+    
+    help_text = """👑 <b>Admin Intelligence Manual</b>
+━━━━━━━━━━━━━━━━━━━━━━
+Master your VPS infrastructure with these commands:
+
+<b>👤 User Management</b>
+• <code>/addpremium &lt;user_id&gt; &lt;days&gt; [pro/max]</code> - Grant access.
+• <code>/rempremium &lt;user_id&gt;</code> - Revoke PRO access.
+• <code>/listusers</code> - Audit all users and their files.
+
+<b>📊 System Oversight</b>
+• <code>/stats</code> - View global system usage.
+• <code>/admin</code> or <code>/addcmd</code> - Open the UI Control Panel.
+
+<i>Use these tools responsibly to manage BrahMos Cloud.</i>"""
+    smart_respond(message, help_text)
 
 if __name__ == "__main__":
     # Start Resource Watchdog
