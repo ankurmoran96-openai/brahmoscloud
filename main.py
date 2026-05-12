@@ -10,8 +10,8 @@ import html
 from tools import state_manager, file_manager, ai_agent, shell_worker, resource_watchdog, webhook_listener, garbage_collector
 from utils import subscription_manager, error_handler
 
-# Initialize Bot
-bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode='HTML')
+# Initialize Bot with increased thread pool to prevent blocking during heavy deployments
+bot = telebot.TeleBot(config.BOT_TOKEN, parse_mode='HTML', num_threads=20)
 
 # --- UI Helpers ---
 

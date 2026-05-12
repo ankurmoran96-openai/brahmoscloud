@@ -44,7 +44,7 @@ def monitor_resources():
                         print(f"Container {container.name} exceeded Disk limit ({disk_usage:.2f}MB > {limits['disk']}MB). Killing...")
                         container.stop()
                         
-            time.sleep(10) # Check every 10 seconds
+            time.sleep(60) # Check every 60 seconds to reduce Docker Daemon load
         except Exception as e:
             print(f"Watchdog error: {e}")
-            time.sleep(5)
+            time.sleep(30)
