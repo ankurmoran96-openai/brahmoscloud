@@ -167,7 +167,7 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, p
         dep_success, container_id = shell_worker.deploy_project(user_id, temp_dir, codebase_id, port=assigned_port)
         
         if dep_success:
-            state_manager.add_container(user_id, container_id, codebase_id, port=assigned_port, project_name=project_name)
+            state_manager.add_container(user_id, container_id, codebase_id, port=assigned_port, project_name=project_name, entry_point_file=deployment_data.get("entry_point_file"))
             
             # Post-deployment check
             import time
@@ -889,14 +889,46 @@ def redeploy_callback(call):
     codebase_id = call.data.replace("redeploy_", "")
     user_id = call.from_user.id
     
-    # Get existing port
+    # Get existing port and entry_point
     db = state_manager.load_db()
     assigned_port = None
+    existing_entry = None
+    proj_name = None
     for cont_id, data in db["containers"].items():
         if data["codebase_id"] == codebase_id:
             assigned_port = data.get("port")
+            existing_entry = data.get("entry_point_file")
+            proj_name = data.get("project_name")
             break
+            
+    # Re-run AI Orchestration to fix any hallucinated scripts
+    user_storage = os.path.join(shell_worker.STORAGE_BASE, str(user_id), codebase_id)
+    if os.path.exists(user_storage):
+        bot.edit_message_text("🤖 <b>Re-evaluating deployment scripts...</b>", call.message.chat.id, call.message.message_id)
+        file_list, code_contents = ai_agent.read_relevant_files(user_storage)
+        deployment_data = ai_agent.orchestrate_deployment(user_id, file_list, code_contents, existing_entry_point=existing_entry)
+        
+        if deployment_data and deployment_data.get("success"):
+            # Update files
+            with open(os.path.join(user_storage, 'requirements.txt'), 'w') as f:
+                f.write(deployment_data.get("requirements_txt", ""))
+            
+            start_sh_content = deployment_data.get("start_sh", "").strip()
+            if not start_sh_content.startswith("#!"):
+                start_sh_content = "#!/bin/sh\n" + start_sh_content
+            start_sh_content = start_sh_content.replace("\r\n", "\n")
+            with open(os.path.join(user_storage, 'start.sh'), 'wb') as f:
+                f.write(start_sh_content.encode('utf-8'))
+                
+            env_content = deployment_data.get("env_file", "")
+            if env_content:
+                with open(os.path.join(user_storage, '.env'), 'w') as f:
+                    f.write(env_content)
+            
+            # Update existing entry
+            existing_entry = deployment_data.get("entry_point_file")
     
+    bot.edit_message_text("🐳 <b>Rebuilding Docker container...</b>", call.message.chat.id, call.message.message_id)
     success, new_container_id = shell_worker.rebuild_container(user_id, codebase_id, port=assigned_port)
     if success:
         # Update state manager
@@ -904,11 +936,11 @@ def redeploy_callback(call):
             if data["codebase_id"] == codebase_id:
                 state_manager.remove_container(cont_id)
                 
-        state_manager.add_container(user_id, new_container_id, codebase_id, port=assigned_port)
-        bot.answer_callback_query(call.id, "✅ Application redeployed successfully.", show_alert=True)
+        state_manager.add_container(user_id, new_container_id, codebase_id, port=assigned_port, project_name=proj_name, entry_point_file=existing_entry)
+        bot.send_message(call.message.chat.id, "✅ Application redeployed successfully.")
         manage_app_callback(call, code_id=codebase_id)
     else:
-        bot.answer_callback_query(call.id, f"❌ Failed to redeploy container.", show_alert=True)
+        bot.send_message(call.message.chat.id, f"❌ Failed to redeploy container.")
 
 @bot.message_handler(commands=['admincmd', 'adminhelp'])
 def admin_help_command(message):

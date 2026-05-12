@@ -48,8 +48,15 @@ async def github_webhook(user_id: str, codebase_id: str, request: Request):
                 file_list, code_contents = ai_agent.read_relevant_files(user_storage)
                 
                 # We can perform a full re-scan or use the orchestrator logic.
-                # For safety, we re-run the Agent 1 and Agent 2 validation.
-                deployment_data = ai_agent.orchestrate_deployment(user_id, file_list, code_contents)
+                # Pass the existing entry point to avoid hallucinations during update
+                db = state_manager.load_db()
+                existing_entry = None
+                for c in db["containers"].values():
+                    if c["codebase_id"] == codebase_id:
+                        existing_entry = c.get("entry_point_file")
+                        break
+
+                deployment_data = ai_agent.orchestrate_deployment(user_id, file_list, code_contents, existing_entry_point=existing_entry)
                 
                 if not deployment_data.get("success"):
                     print(f"Security Audit Failed! Rolling back. Reason: {deployment_data.get('reason')}")

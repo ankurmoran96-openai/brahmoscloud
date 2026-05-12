@@ -95,7 +95,7 @@ def update_user_premium(user_id, days, tier="pro"):
     save_db(db)
     return True
 
-def add_container(user_id, container_id, codebase_id, port=None, project_name=None):
+def add_container(user_id, container_id, codebase_id, port=None, project_name=None, entry_point_file=None):
     db = load_db()
     user_id_str = str(user_id)
     if user_id_str not in db["users"]:
@@ -108,7 +108,8 @@ def add_container(user_id, container_id, codebase_id, port=None, project_name=No
         "codebase_id": codebase_id,
         "project_name": project_name or f"Project-{codebase_id}",
         "status": "running",
-        "port": port
+        "port": port,
+        "entry_point_file": entry_point_file
     }
     save_db(db)
 

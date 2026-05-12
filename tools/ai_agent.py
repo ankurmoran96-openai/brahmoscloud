@@ -81,7 +81,7 @@ def call_ai(prompt, tools, tool_choice="required"):
         print(f"AI Call failed: {e}")
         return None
 
-def orchestrate_deployment(user_id, file_path_list, code_contents):
+def orchestrate_deployment(user_id, file_path_list, code_contents, existing_entry_point=None):
     # --- PHASE 1: AGENT 1 (Basic Check & Extraction) ---
     tools1 = [
         {
@@ -101,7 +101,7 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
                     "type": "object",
                     "properties": {
                         "variables": { "type": "array", "items": { "type": "string" } },
-                        "entry_point_file": { "type": "string" },
+                        "entry_point_file": { "type": "string", "description": "The exact name of the file to execute (e.g. bot.py)" },
                         "project_type": { "type": "string", "enum": ["bot", "web_app", "api"] },
                         "internal_port": { "type": "integer" }
                     },
@@ -111,7 +111,11 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
         }
     ]
     
-    prompt1 = f"{AGENT1_PROMPT}\n\nFiles: {json.dumps(file_path_list)}\nCode: {json.dumps(code_contents)}"
+    extra_context = ""
+    if existing_entry_point:
+        extra_context = f"\n\nIMPORTANT: The user previously defined the entry point as '{existing_entry_point}'. YOU MUST verify and reuse this EXACT file name unless the project structure has completely changed."
+        
+    prompt1 = f"{AGENT1_PROMPT}{extra_context}\n\nFiles: {json.dumps(file_path_list)}\nCode: {json.dumps(code_contents)}"
     calls1 = call_ai(prompt1, tools1)
     
     if not calls1: return {"success": False, "reason": "Agent 1 failed."}
@@ -206,6 +210,7 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
         "success": True,
         "project_type": project_type,
         "internal_port": internal_port,
+        "entry_point_file": final_entry_point,
         "requirements_txt": args3.get('requirements_txt', ''),
         "env_file": args3.get('env_file', ''),
         "start_sh": args3.get('start_sh', '')
