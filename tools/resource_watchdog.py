@@ -20,6 +20,14 @@ def monitor_resources():
                 # RAM Usage
                 mem_usage = stats['memory_stats'].get('usage', 0) / (1024 * 1024) # MB
                 
+                # Disk Usage (Estimated from container size)
+                # Note: Docker stats doesn't give disk I/O easily, but we can check the RW layer
+                try:
+                    container_info = client.api.inspect_container(container.id)
+                    disk_usage = container_info.get('SizeRw', 0) / (1024 * 1024) # MB
+                except Exception:
+                    disk_usage = 0
+
                 # Find owner and tier
                 # Name format: brahmos_cont_{user_id}_{codebase_id}
                 parts = container.name.split("_")
@@ -31,7 +39,10 @@ def monitor_resources():
                     if mem_usage > limits["ram"]:
                         print(f"Container {container.name} exceeded RAM limit ({mem_usage:.2f}MB > {limits['ram']}MB). Killing...")
                         container.stop()
-                        # Notify user logic can be added here (via bot instance)
+                    
+                    if disk_usage > limits["disk"]:
+                        print(f"Container {container.name} exceeded Disk limit ({disk_usage:.2f}MB > {limits['disk']}MB). Killing...")
+                        container.stop()
                         
             time.sleep(10) # Check every 10 seconds
         except Exception as e:

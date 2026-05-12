@@ -75,8 +75,9 @@ def deploy_project(user_id, directory, codebase_id, port=None):
         print(f"Starting container {container_name} with port mapping...")
         
         # Setup port mapping if provided
-        # We assume the container listens on port 8000 internally for simplicity
-        ports_config = { '8000/tcp': port } if port else None
+        # Use the port identified by AI
+        internal_port = port if port else 8000
+        ports_config = { f'{internal_port}/tcp': port } if port else None
         
         container = client.containers.run(
             image_tag,

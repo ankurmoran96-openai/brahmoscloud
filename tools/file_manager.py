@@ -15,7 +15,12 @@ def get_temp_dir():
     return path
 
 def extract_zip(zip_path, extract_to):
+    extract_to = os.path.abspath(extract_to)
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        for member in zip_ref.infolist():
+            target_path = os.path.abspath(os.path.join(extract_to, member.filename))
+            if not target_path.startswith(extract_to):
+                raise Exception(f"Potential Zip Slip attack detected: {member.filename}")
         zip_ref.extractall(extract_to)
     return extract_to
 

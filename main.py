@@ -124,52 +124,46 @@ def process_deployment(message, repo_url=None, zip_path=None, custom_pat=None, p
         if not success:
             return bot.edit_message_text("❌ <b>Source Error:</b> Failed to retrieve codebase.", message.chat.id, status_msg.message_id)
             
-        # 3. AI Analysis
-        bot.edit_message_text("🧠 <b>AI Security Scan in progress...</b>", message.chat.id, status_msg.message_id)
+        # 3. Multi-Agent Orchestration
+        bot.edit_message_text("🤖 <b>Agent 1: Discovery Scout</b> is scanning codebase...", message.chat.id, status_msg.message_id)
         file_list, code_contents = ai_agent.read_relevant_files(temp_dir)
-        analysis = ai_agent.analyze_codebase(file_list, code_contents)
         
-        if not analysis.get("safe"):
-            # Flag user as suspicious
-            state_manager.flag_suspicious_user(user_id)
-            bot.edit_message_text(f"🛑 <b>Security Alert:</b> {analysis.get('reason')}\n\n<i>Note: Your account has been flagged for a deep audit on future deployments.</i>", message.chat.id, status_msg.message_id)
+        # Call the Orchestrator (Agent 1 -> Agent 2 -> Agent 3)
+        deployment_data = ai_agent.orchestrate_deployment(user_id, file_list, code_contents)
+        
+        if not deployment_data.get("success"):
+            bot.edit_message_text(f"🛑 <b>Deployment Rejected:</b>\n{deployment_data.get('reason')}", message.chat.id, status_msg.message_id)
             return garbage_collector.cleanup_deployment(temp_dir)
 
-        # 3.1 Deep Audit for Suspicious Users
-        if state_manager.is_user_suspicious(user_id):
-            bot.edit_message_text("🔍 <b>Deep Security Audit in progress...</b>", message.chat.id, status_msg.message_id)
-            deep_analysis = ai_agent.deep_security_audit(file_list, code_contents)
-            if not deep_analysis.get("safe"):
-                bot.edit_message_text(f"🛑 <b>Deep Security Alert:</b> {deep_analysis.get('reason')}", message.chat.id, status_msg.message_id)
-                return garbage_collector.cleanup_deployment(temp_dir)
-            
-        # 4. Preparation
-        bot.edit_message_text("🛠 <b>Generating deployment scripts...</b>", message.chat.id, status_msg.message_id)
+        # 4. Preparation (Agent 3 output)
+        bot.edit_message_text("🏗 <b>Agent 3: Deployment Architect</b> is finalizing files...", message.chat.id, status_msg.message_id)
+        
         with open(os.path.join(temp_dir, 'requirements.txt'), 'w') as f:
-            f.write(analysis.get("requirements_txt", ""))
+            f.write(deployment_data.get("requirements_txt", ""))
             
-        start_sh_content = analysis.get("start_sh", "").strip()
-        # Ensure Shebang exists
+        start_sh_content = deployment_data.get("start_sh", "").strip()
         if not start_sh_content.startswith("#!"):
             start_sh_content = "#!/bin/sh\n" + start_sh_content
         
-        # Force Unix Line Endings (LF) and write
         start_sh_content = start_sh_content.replace("\r\n", "\n")
         with open(os.path.join(temp_dir, 'start.sh'), 'wb') as f:
             f.write(start_sh_content.encode('utf-8'))
             
-        env_content = analysis.get("env_file", "")
+        env_content = deployment_data.get("env_file", "")
         if env_content:
             with open(os.path.join(temp_dir, '.env'), 'w') as f:
                 f.write(env_content)
             
         # 5. Docker Deployment
         codebase_id = str(uuid.uuid4())[:8]
-        proj_type = analysis.get("project_type", "bot")
+        proj_type = deployment_data.get("project_type", "bot")
         is_web = proj_type in ['web_app', 'api']
+        
+        # Use port from AI if available, else get next available
+        ai_port = deployment_data.get("internal_port")
         assigned_port = state_manager.get_next_available_port() if is_web else None
         
-        bot.edit_message_text(f"🐳 <b>Deploying {proj_type.upper()}...</b>", message.chat.id, status_msg.message_id)
+        bot.edit_message_text(f"🐳 <b>Deploying {proj_type.upper()} via Docker...</b>", message.chat.id, status_msg.message_id)
         dep_success, container_id = shell_worker.deploy_project(user_id, temp_dir, codebase_id, port=assigned_port)
         
         if dep_success:

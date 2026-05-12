@@ -1,24 +1,29 @@
 import json
 import os
+import threading
 from datetime import datetime, timedelta
+
+db_lock = threading.Lock()
 
 DB_FILE = os.path.join(os.path.dirname(__file__), '..', 'database.json')
 
 SUSPICIOUS_FILE = os.path.join(os.path.dirname(__file__), '..', 'utils', 'suspicious_user.json')
 
 def load_suspicious():
-    if not os.path.exists(SUSPICIOUS_FILE):
-        os.makedirs(os.path.dirname(SUSPICIOUS_FILE), exist_ok=True)
-        return []
-    with open(SUSPICIOUS_FILE, 'r') as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
+    with db_lock:
+        if not os.path.exists(SUSPICIOUS_FILE):
+            os.makedirs(os.path.dirname(SUSPICIOUS_FILE), exist_ok=True)
             return []
+        with open(SUSPICIOUS_FILE, 'r') as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return []
 
 def save_suspicious(data):
-    with open(SUSPICIOUS_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+    with db_lock:
+        with open(SUSPICIOUS_FILE, 'w') as f:
+            json.dump(data, f, indent=4)
 
 def flag_suspicious_user(user_id):
     users = load_suspicious()
@@ -33,17 +38,19 @@ def is_user_suspicious(user_id):
     return str(user_id) in users
 
 def load_db():
-    if not os.path.exists(DB_FILE):
-        return {"users": {}, "containers": {}}
-    with open(DB_FILE, 'r') as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
+    with db_lock:
+        if not os.path.exists(DB_FILE):
             return {"users": {}, "containers": {}}
+        with open(DB_FILE, 'r') as f:
+            try:
+                return json.load(f)
+            except json.JSONDecodeError:
+                return {"users": {}, "containers": {}}
 
 def save_db(data):
-    with open(DB_FILE, 'w') as f:
-        json.dump(data, f, indent=4)
+    with db_lock:
+        with open(DB_FILE, 'w') as f:
+            json.dump(data, f, indent=4)
 
 def get_all_users():
     db = load_db()
