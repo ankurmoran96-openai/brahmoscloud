@@ -885,7 +885,7 @@ def list_private_repos_callback(call):
         repos = response.json()
         
         if not repos:
-            return bot.edit_message_text("❌ <b>No repositories found</b> in your account.", call.message.chat.id, call.message.message_id)
+            return smart_respond(call, "❌ <b>No repositories found</b> in your account.", edit=True)
 
         text = "📂 <b>Select a Repository to Deploy:</b>\n━━━━━━━━━━━━━━━━━━━━━━\nChoose a project from your GitHub account:"
         markup = types.InlineKeyboardMarkup()
@@ -896,10 +896,10 @@ def list_private_repos_callback(call):
             markup.row(types.InlineKeyboardButton(f"{is_private} {name}", callback_data=f"deploy_repo_{name}"))
             
         markup.row(types.InlineKeyboardButton("⬅️ Back", callback_data="deploy_menu"))
-        bot.edit_message_text(text, call.message.chat.id, call.message.message_id, reply_markup=markup)
+        smart_respond(call, text, markup=markup, edit=True)
         
     except Exception as e:
-        bot.edit_message_text(f"❌ <b>GitHub API Error:</b>\n<code>{str(e)}</code>", call.message.chat.id, call.message.message_id)
+        smart_respond(call, f"❌ <b>GitHub API Error:</b>\n<code>{str(e)}</code>", edit=True)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("deploy_repo_"))
 def deploy_repo_callback(call):
@@ -1070,6 +1070,10 @@ if __name__ == "__main__":
     
     # Start Webhook Listener (Run in background)
     threading.Thread(target=webhook_listener.start_listener, daemon=True).start()
+    
+    print("BrahMos Cloud Bot is starting...")
+    bot.infinity_polling()
+.start_listener, daemon=True).start()
     
     print("BrahMos Cloud Bot is starting...")
     bot.infinity_polling()
