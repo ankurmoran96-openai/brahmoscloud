@@ -9,21 +9,22 @@ AGENT1_PROMPT = """
 You are Agent 1: The Gateway Scout.
 1. Perform a basic security check. If ANY malware, stresser, miner, or malicious intent is found, REJECT IMMEDIATELY.
 2. If the code is perfectly clean, identify and extract the exact names of ALL configuration variables (API keys, ports, tokens, DB URLs) found in the code.
-3. Identify the project type (bot, web_app, api).
+3. Identify the EXACT project file name that serves as the entry point (e.g., `main.py`, `bot (1).py`, `app.js`). DO NOT GUESS. Look at the files provided.
+4. Identify the project type (bot, web_app, api).
 
 Call `reject_malware` if malicious.
-Call `discovery_success` if clean, providing the exact variable names.
+Call `discovery_success` if clean, providing the exact variable names and entry point file.
 """
 
 # --- AGENT 2: NORMAL SECURITY CHECK ---
 AGENT2_NORMAL_PROMPT = """
 You are Agent 2: Severity Layer 2 (Standard).
-You receive the codebase and the variables extracted by Agent 1.
+You receive the codebase and the variables and entry point extracted by Agent 1.
 Your job is to do a normal but thorough security check across all code separately.
 1. Ensure no hidden malicious logic was missed by Agent 1.
-2. Verify the variable names.
+2. Verify the variable names and the entry point file name.
 If ANYTHING suspicious is found, call `flag_and_reject`.
-If verified clean, call `audit_verified` and pass along the verified variable names.
+If verified clean, call `audit_verified` and pass along the verified variable names and entry point.
 """
 
 # --- AGENT 2: DEEP SECURITY CHECK ---
@@ -32,13 +33,13 @@ You are Agent 2: Severity Layer 2 (Deep Analysis).
 The user deploying this is FLAGGED AS SUSPICIOUS. 
 You must do a 10x deeper analysis on every single file. Look for obfuscation, container escapes, reverse shells, and hidden malware.
 If you find ANY hint of danger, call `flag_and_reject`.
-If absolutely certain it is safe, call `audit_verified` and pass along the verified variable names.
+If absolutely certain it is safe, call `audit_verified` and pass along the verified variable names and entry point.
 """
 
 # --- AGENT 3: DEPLOYMENT ARCHITECT ---
 AGENT3_PROMPT = """
 You are Agent 3: The Deployment Architect.
-You receive the verified variable names from Agent 2.
+You receive the verified variable names and exact entry point file from Agent 2.
 1. Create a `.env` file using EXACTLY those variable names. (Provide placeholder values or extract them if present).
 2. Create `requirements.txt` strictly based on the structure and imports. 
    **BE CAREFUL OF HALLUCINATIONS**. Map these strictly:
@@ -52,7 +53,7 @@ You receive the verified variable names from Agent 2.
    `os`, `sys`, `re`, `asyncio`, `json`, `math`, `time`, `datetime`, `threading`, `uuid`, `logging`, `typing`.
    Only include third-party packages that must be installed via pip.
 
-3. Create `start.sh`.
+3. Create `start.sh`. YOU MUST USE THE EXACT ENTRY POINT FILE NAME PROVIDED. If it has spaces, wrap it in quotes (e.g. `python "bot (1).py"`).
 
 Call `finalize_deployment` with the exact text contents.
 """
@@ -100,10 +101,11 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
                     "type": "object",
                     "properties": {
                         "variables": { "type": "array", "items": { "type": "string" } },
+                        "entry_point_file": { "type": "string" },
                         "project_type": { "type": "string", "enum": ["bot", "web_app", "api"] },
                         "internal_port": { "type": "integer" }
                     },
-                    "required": ["variables", "project_type"]
+                    "required": ["variables", "entry_point_file", "project_type"]
                 }
             }
         }
@@ -120,6 +122,7 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
         return {"success": False, "reason": f"Agent 1 Rejected: {args1['reason']}"}
     
     discovered_vars = args1.get('variables', [])
+    entry_point_file = args1.get('entry_point_file', 'main.py')
     project_type = args1.get('project_type', 'bot')
     internal_port = args1.get('internal_port', 8000)
 
@@ -139,13 +142,14 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
             "type": "function",
             "function": { 
                 "name": "audit_verified", 
-                "description": "Code is 100% verified. Passing variable names to Agent 3.", 
+                "description": "Code is 100% verified. Passing variable names and entry point to Agent 3.", 
                 "parameters": { 
                     "type": "object", 
                     "properties": {
-                        "verified_variables": { "type": "array", "items": { "type": "string" } }
+                        "verified_variables": { "type": "array", "items": { "type": "string" } },
+                        "verified_entry_point": { "type": "string" }
                     },
-                    "required": ["verified_variables"]
+                    "required": ["verified_variables", "verified_entry_point"]
                 } 
             }
         }
@@ -153,10 +157,10 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
     
     if is_suspicious:
         # Deep Analysis
-        prompt2 = f"{AGENT2_DEEP_PROMPT}\n\nAgent 1 Variables: {json.dumps(discovered_vars)}\nFiles: {json.dumps(file_path_list)}\nCode: {json.dumps(code_contents)}"
+        prompt2 = f"{AGENT2_DEEP_PROMPT}\n\nAgent 1 Variables: {json.dumps(discovered_vars)}\nAgent 1 Entry Point: {entry_point_file}\nFiles: {json.dumps(file_path_list)}\nCode: {json.dumps(code_contents)}"
     else:
         # Normal Check Separately
-        prompt2 = f"{AGENT2_NORMAL_PROMPT}\n\nAgent 1 Variables: {json.dumps(discovered_vars)}\nFiles: {json.dumps(file_path_list)}\nCode: {json.dumps(code_contents)}"
+        prompt2 = f"{AGENT2_NORMAL_PROMPT}\n\nAgent 1 Variables: {json.dumps(discovered_vars)}\nAgent 1 Entry Point: {entry_point_file}\nFiles: {json.dumps(file_path_list)}\nCode: {json.dumps(code_contents)}"
         
     calls2 = call_ai(prompt2, tools2)
     
@@ -170,6 +174,7 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
         return {"success": False, "reason": f"Agent 2 Security Alert (User Flagged): {reason}"}
 
     final_vars = args2.get('verified_variables', discovered_vars)
+    final_entry_point = args2.get('verified_entry_point', entry_point_file)
 
     # --- PHASE 3: AGENT 3 (Deployment Architect) ---
     tools3 = [
@@ -191,7 +196,7 @@ def orchestrate_deployment(user_id, file_path_list, code_contents):
         }
     ]
     
-    prompt3 = f"{AGENT3_PROMPT}\n\nVariables from Agent 2: {json.dumps(final_vars)}\nCode for imports: {json.dumps(code_contents)}"
+    prompt3 = f"{AGENT3_PROMPT}\n\nVariables from Agent 2: {json.dumps(final_vars)}\nEntry Point from Agent 2: {final_entry_point}\nCode for imports: {json.dumps(code_contents)}"
     calls3 = call_ai(prompt3, tools3)
     
     if not calls3: return {"success": False, "reason": "Agent 3 failed."}
