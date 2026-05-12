@@ -58,15 +58,6 @@ def get_start_keyboard(user_id=None):
     markup.row(types.InlineKeyboardButton("👤 My Account", callback_data="account_info"),
                types.InlineKeyboardButton("📖 Guide", callback_data="help_menu"))
     
-    # Quick access to GitPushBot
-    user_state = state_manager.get_user(user_id)
-    github_token = user_state.get("github_token", "")
-    push_bot_url = f"https://t.me/brahmospushbot?start=auth_{user_id}"
-    if github_token:
-        push_bot_url += f"_{github_token}"
-        
-    markup.row(types.InlineKeyboardButton("📂 Manage My Files", url=push_bot_url))
-    
     markup.row(types.InlineKeyboardButton("👨‍💻 Developer", url=config.DEV_LINK),
                types.InlineKeyboardButton("🌐 Community", url=config.COMMUNITY_LINK))
     return markup
@@ -757,26 +748,11 @@ def account_info_callback(call):
 
 ⚠️ <b>Backup Policy:</b> <i>Always keep a local copy of your code. We are not liable for data loss during maintenance or system errors.</i>
 
-<i>{"Full administrative access granted." if is_admin else "Need more power? Contact the developer for a Pro upgrade."}</i>
-
-📄 <b>Manage Files:</b>
-If you want to manage your files you can use this bot given below:
-"""
+<i>{"Full administrative access granted." if is_admin else "Need more power? Contact the developer for a Pro upgrade."}</i>"""
     
     markup = types.InlineKeyboardMarkup()
     markup.row(types.InlineKeyboardButton("💎 Premium Plans", callback_data="view_plans"))
     markup.row(types.InlineKeyboardButton("🔑 Update GitHub PAT", callback_data="update_github_token"))
-    
-    # GitPushBot link with deep linking
-    github_token = user_state.get("github_token", "")
-    push_bot_url = f"https://t.me/brahmospushbot?start=auth_{user_id}"
-    if github_token:
-        # We don't want to leak the token in the URL if it's too long or sensitive, 
-        # but the user requested "instanly logins tbeir account".
-        # Let's pass the token too, safely encoded if possible, or just raw if it's a PAT.
-        push_bot_url += f"_{github_token}"
-        
-    markup.row(types.InlineKeyboardButton("📂 Manage Files (GitPushBot)", url=push_bot_url))
     markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
     
     smart_respond(call, text, markup=markup, edit=is_callback)
@@ -794,21 +770,24 @@ Please provide your <b>GitHub Personal Access Token (PAT)</b> to enable private 
 3️⃣ Generate a new token with <code>repo</code> and <code>admin:repo_hook</code> scopes.
 
 <i>Your token is stored securely and used only for your own deployments.</i>"""
-    msg = smart_respond(call, text)
+    msg = bot.send_message(call.message.chat.id, text, parse_mode="HTML")
     bot.register_next_step_handler(msg, save_github_token_step)
 
 def save_github_token_step(message):
+    if not message.text:
+        return bot.send_message(message.chat.id, "❌ <b>Invalid Input.</b> Operation cancelled.", parse_mode="HTML")
+        
     token = message.text.strip()
     user_id = message.from_user.id
     
     # Basic validation
     if not token.startswith(("ghp_", "github_pat_")):
-        return smart_respond(message, "❌ <b>Invalid Token:</b> GitHub tokens usually start with <code>ghp_</code> or <code>github_pat_</code>. Please try again.")
+        return bot.send_message(message.chat.id, "❌ <b>Invalid Token:</b> GitHub tokens usually start with <code>ghp_</code> or <code>github_pat_</code>. Please try again.", parse_mode="HTML")
 
     if state_manager.update_user_github_token(user_id, token):
-        smart_respond(message, "✅ <b>GitHub PAT Updated!</b>\nYou can now deploy private repositories directly from the menu.")
+        bot.send_message(message.chat.id, "✅ <b>GitHub PAT Updated!</b>\nYou can now deploy private repositories directly from the menu.", parse_mode="HTML")
     else:
-        smart_respond(message, "❌ Failed to update GitHub token.")
+        bot.send_message(message.chat.id, "❌ Failed to update GitHub token.", parse_mode="HTML")
 
 @bot.callback_query_handler(func=lambda call: call.data == "view_plans")
 def view_plans_callback(call):
@@ -854,7 +833,7 @@ def deploy_menu_callback(call):
     user_state = state_manager.get_user(user_id)
     has_token = bool(user_state.get("github_token"))
 
-    text = """🚀 <b>How to Deploy</b>
+    text = """🚀 <b>How to Deploy & Manage Files</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 To host your application on <b>BrahMos Cloud</b>, choose one of these methods:
 
@@ -867,6 +846,9 @@ Upload a <code>.zip</code> file containing your project's source code.
 3️⃣ <b>Private Repository:</b>
 If you have connected your GitHub PAT, you can select from your private repositories.
 
+📄 <b>Manage Files:</b>
+If you want to manage or host your files, you can use the bot given below. It takes your GitHub PAT as input, instantly logs into your account, and lets you manage and host it seamlessly!
+
 <i>Our AI will automatically scan your files, create a <code>start.sh</code>, and deploy your container in seconds.</i>"""
 
     markup = types.InlineKeyboardMarkup()
@@ -875,6 +857,12 @@ If you have connected your GitHub PAT, you can select from your private reposito
     else:
         markup.row(types.InlineKeyboardButton("🔑 Connect GitHub for Private Repos", callback_data="update_github_token"))
         
+    github_token = user_state.get("github_token", "")
+    push_bot_url = f"https://t.me/brahmospushbot?start=auth_{user_id}"
+    if github_token:
+        push_bot_url += f"_{github_token}"
+        
+    markup.row(types.InlineKeyboardButton("📂 Manage Files (GitPushBot)", url=push_bot_url))
     markup.row(types.InlineKeyboardButton("⬅️ Back to Home", callback_data="back_start"))
 
     smart_respond(call, text, markup=markup, edit=True)
