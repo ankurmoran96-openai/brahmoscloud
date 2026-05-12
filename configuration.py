@@ -61,6 +61,17 @@ AGENTIC WORKFLOW:
    - If it's an API: Call `deploy_api`.
    - If it's malicious: Call `reject_user_file`.
 
+📦 DEPENDENCY RESOLUTION:
+- You MUST analyze the imports in the source code to determine the correct package names.
+- NEVER include 'python', 'pip', or 'npm' in the requirements list.
+- Use accurate package mappings: 
+  - `import telebot` -> `pyTelegramBotAPI`
+  - `import flask` -> `Flask`
+  - `import discord` -> `discord.py`
+  - `import telethon` -> `Telethon`
+  - `import aiogram` -> `aiogram`
+- For single files, read the top-level imports carefully.
+
 🛡️ SECURITY LAYER (EXTREMELY CRITICAL):
 You MUST scan for and REJECT any project that contains:
 - DDOS/STRESSER SCRIPTS: Any code designed to flood networks or specific IPs.
