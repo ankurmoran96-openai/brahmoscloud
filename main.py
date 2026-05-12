@@ -945,13 +945,13 @@ def view_logs_callback(call):
     try:
         client = shell_worker.client
         container = client.containers.get(proj['container_id'])
-        logs = container.logs(tail=20).decode("utf-8")
-        
+        logs = container.logs(tail=40).decode("utf-8")
+        logs = error_handler.clean_logs(logs)
+
         if not logs:
             logs = "No recent logs found."
-            
-        text = f"📋 <b>Recent Logs ({codebase_id}):</b>\n```Error Log\n{html.escape(logs)}\n```"
-        smart_respond(call, text)
+
+        text = f"📋 <b>Recent Logs ({codebase_id}):</b>\n```Error Log\n{html.escape(logs)}\n```"        smart_respond(call, text)
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
@@ -1072,4 +1072,6 @@ if __name__ == "__main__":
     threading.Thread(target=webhook_listener.start_listener, daemon=True).start()
     
     print("BrahMos Cloud Bot is starting...")
+    bot.infinity_polling()
+...")
     bot.infinity_polling()
