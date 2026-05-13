@@ -70,7 +70,16 @@ AGENTIC WORKFLOW:
   - `import discord` -> `discord.py`
   - `import telethon` -> `Telethon`
   - `import aiogram` -> `aiogram`
+  - `import requests` -> `requests`
+  - `import PIL` -> `Pillow`
+  - `import cv2` -> `opencv-python`
+  - `import numpy` -> `numpy`
+  - `import pandas` -> `pandas`
+  - `import bs4` -> `beautifulsoup4`
+  - `import dotenv` -> `python-dotenv`
+  - `import pyrogram` -> `pyrogram`
 - For single files, read the top-level imports carefully.
+- NEVER include built-in modules like `os`, `sys`, `json`, `time`, etc.
 
 🛡️ SECURITY LAYER (EXTREMELY CRITICAL):
 You MUST scan for and REJECT any project that contains:

@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+import re
 import configuration as config
 from tools import state_manager
 
@@ -8,6 +9,9 @@ from tools import state_manager
 AGENT1_PROMPT = """
 You are Agent 1: The Gateway Scout.
 1. Perform a basic security check. If ANY malware, stresser, miner, or malicious intent is found, REJECT IMMEDIATELY.
+
+CRITICAL EXCEPTION: Do NOT reject or flag a codebase just for containing hardcoded credentials like 'OWNER_ID', 'ADMIN_ID', 'BOT_TOKEN', API keys, or Telegram IDs. These are common and safe. Focus ONLY on actual destructive payloads (DDOS, miners, etc.).
+
 2. If the code is perfectly clean, identify and extract the exact names of ALL configuration variables (API keys, ports, tokens, DB URLs) found in the code.
 3. Identify the EXACT project file name that serves as the entry point (e.g., `main.py`, `bot (1).py`, `app.js`). DO NOT GUESS. Look at the files provided.
 4. Identify the project type (bot, web_app, api).
@@ -23,6 +27,9 @@ You receive the codebase and the variables and entry point extracted by Agent 1.
 Your job is to do a normal but thorough security check across all code separately.
 1. Ensure no hidden malicious logic was missed by Agent 1.
 2. Verify the variable names and the entry point file name.
+
+CRITICAL EXCEPTION: Do NOT flag or reject the codebase just for containing hardcoded credentials like 'OWNER_ID', 'ADMIN_ID', 'BOT_TOKEN', API keys, or Telegram IDs. Focus ONLY on actual destructive payloads.
+
 If ANYTHING suspicious is found, call `flag_and_reject`.
 If verified clean, call `audit_verified` and pass along the verified variable names and entry point.
 """
@@ -33,7 +40,7 @@ You are Agent 2: Severity Layer 2 (Deep Analysis).
 The user deploying this is FLAGGED AS SUSPICIOUS. 
 You must do a 10x deeper analysis on every single file. Look for obfuscation, container escapes, reverse shells, and hidden malware.
 
-CRITICAL EXCEPTION 1: Do NOT flag or reject the codebase just for containing hardcoded credentials like 'OWNER_ID', 'BOT_TOKEN', API keys, or local user databases (e.g., 'database.json', 'users.json'). Focus ONLY on actual destructive payloads.
+CRITICAL EXCEPTION 1: Do NOT flag or reject the codebase just for containing hardcoded credentials like 'OWNER_ID', 'ADMIN_ID', 'BOT_TOKEN', API keys, or local user databases (e.g., 'database.json', 'users.json'). Focus ONLY on actual destructive payloads.
 CRITICAL EXCEPTION 2: Code files are intentionally TRUNCATED by the system to save processing power. "Incomplete" or "Truncated" files are EXPECTED BEHAVIOR. Do NOT reject a deployment because a file appears truncated.
 
 If you find ANY hint of actual danger, call `flag_and_reject`.
@@ -43,24 +50,54 @@ If absolutely certain it is safe, call `audit_verified` and pass along the verif
 # --- AGENT 3: DEPLOYMENT ARCHITECT ---
 AGENT3_PROMPT = """
 You are Agent 3: The Deployment Architect.
-You receive the verified variable names and exact entry point file from Agent 2.
+You receive the verified variable names, exact entry point file, and a list of detected imports.
 1. Create a `.env` file using EXACTLY those variable names. (Provide placeholder values or extract them if present).
 2. Create `requirements.txt` strictly based on the structure and imports. 
    **BE CAREFUL OF HALLUCINATIONS**. Map these strictly:
    - telebot -> pyTelegramBotAPI
+   - flask -> Flask
    - discord -> discord.py
    - PIL -> Pillow
    - cv2 -> opencv-python
+   - telethon -> Telethon
+   - aiogram -> aiogram
+   - requests -> requests
+   - fastapi -> fastapi
+   - uvicorn -> uvicorn
+   - numpy -> numpy
+   - pandas -> pandas
+   - bs4 -> beautifulsoup4
+   - dotenv -> python-dotenv
+   - sqlalchemy -> SQLAlchemy
+   - pydantic -> pydantic
+   - aiohttp -> aiohttp
+   - redis -> redis
+   - pymongo -> pymongo
+   - google.generativeai -> google-generativeai
+   - openai -> openai
+   - pyrogram -> pyrogram
    
    **CRITICAL RULE FOR REQUIREMENTS.TXT:**
    NEVER include built-in Python modules. Do NOT include:
-   `os`, `sys`, `re`, `asyncio`, `json`, `math`, `time`, `datetime`, `threading`, `uuid`, `logging`, `typing`.
+   `os`, `sys`, `re`, `asyncio`, `json`, `math`, `time`, `datetime`, `threading`, `uuid`, `logging`, `typing`, `sqlite3`, `pathlib`, `collections`, `itertools`, `functools`, `abc`, `enum`, `glob`, `shutil`, `tempfile`, `hashlib`, `hmac`, `base64`, `urllib`, `socket`, `struct`, `pickle`, `marshal`, `inspect`, `traceback`, `random`, `statistics`, `decimal`, `fractions`, `cmath`, `multiprocessing`, `concurrent`, `subprocess`.
    Only include third-party packages that must be installed via pip.
 
 3. Create `start.sh`. YOU MUST USE THE EXACT ENTRY POINT FILE NAME PROVIDED. If it has spaces, wrap it in quotes (e.g. `python "bot (1).py"`).
 
 Call `finalize_deployment` with the exact text contents.
 """
+
+def extract_imports(code_contents):
+    """
+    Extract top-level imports from the code using regex to guide the AI.
+    """
+    imports = set()
+    for code in code_contents.values():
+        # Match 'import package' or 'from package import ...'
+        found = re.findall(r'^\s*(?:import|from)\s+([a-zA-Z0-9_]+)', code, re.MULTILINE)
+        for imp in found:
+            imports.add(imp)
+    return list(imports)
 
 def call_ai(prompt, tools, tool_choice="required"):
     headers = {
@@ -86,6 +123,9 @@ def call_ai(prompt, tools, tool_choice="required"):
         return None
 
 def orchestrate_deployment(user_id, file_path_list, code_contents, existing_entry_point=None):
+    # Extract imports to assist AI
+    detected_imports = extract_imports(code_contents)
+    
     # --- PHASE 1: AGENT 1 (Basic Check & Extraction) ---
     tools1 = [
         {
@@ -194,7 +234,7 @@ def orchestrate_deployment(user_id, file_path_list, code_contents, existing_entr
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "requirements_txt": { "type": "string", "description": "Ensure exact mapping. No hallucinations." },
+                        "requirements_txt": { "type": "string", "description": "Ensure exact mapping. No hallucinations. Only include third-party packages. Prefer package names without version pinning unless a specific version is clearly required." },
                         "env_file": { "type": "string", "description": "Built from variables passed by Agent 2." },
                         "start_sh": { "type": "string" }
                     },
@@ -204,7 +244,7 @@ def orchestrate_deployment(user_id, file_path_list, code_contents, existing_entr
         }
     ]
     
-    prompt3 = f"{AGENT3_PROMPT}\n\nVariables from Agent 2: {json.dumps(final_vars)}\nEntry Point from Agent 2: {final_entry_point}\nCode for imports: {json.dumps(code_contents)}"
+    prompt3 = f"{AGENT3_PROMPT}\n\nDetected Imports: {json.dumps(detected_imports)}\nVariables from Agent 2: {json.dumps(final_vars)}\nEntry Point from Agent 2: {final_entry_point}\nCode for imports: {json.dumps(code_contents)}"
     calls3 = call_ai(prompt3, tools3)
     
     if not calls3: return {"success": False, "reason": "Agent 3 failed."}
@@ -281,15 +321,6 @@ def read_relevant_files(directory):
             file_list.append(file_path)
             
             if file.endswith(relevant_extensions) and len(code_contents) < 15:
-                try:
-                    full_path = os.path.join(root, file)
-                    with open(full_path, 'r', errors='ignore') as f:
-                        code_contents[file_path] = f.read(2000)
-                except Exception:
-                    pass
-                    
-    return file_list, code_contents
-          if file.endswith(relevant_extensions) and len(code_contents) < 15:
                 try:
                     full_path = os.path.join(root, file)
                     with open(full_path, 'r', errors='ignore') as f:

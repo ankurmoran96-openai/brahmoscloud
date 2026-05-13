@@ -951,7 +951,8 @@ def view_logs_callback(call):
         if not logs:
             logs = "No recent logs found."
 
-        text = f"📋 <b>Recent Logs ({codebase_id}):</b>\n```Error Log\n{html.escape(logs)}\n```"        smart_respond(call, text)
+        text = f"📋 <b>Recent Logs ({codebase_id}):</b>\n```Error Log\n{html.escape(logs)}\n```"
+        smart_respond(call, text)
     except Exception as e:
         bot.answer_callback_query(call.id, f"❌ Error: {str(e)}", show_alert=True)
 
