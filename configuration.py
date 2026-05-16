@@ -18,9 +18,9 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 CHANNEL_USERNAME = os.getenv("CHANNEL_USERNAME", "@BrahMosAI")
 
 # --- AI Settings ---
-AI_API_URL = os.getenv("AI_API_URL", "https://api.gptnix.online/v1/chat/completions")
+AI_API_URL = os.getenv("AI_API_URL", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
 AI_API_KEY = os.getenv("AI_API_KEY", "")
-AI_MODEL = os.getenv("AI_MODEL", "openai/gpt-4o")
+AI_MODEL = os.getenv("AI_MODEL", "gemini-3-flash-preview")
 
 # --- GitHub Settings ---
 GITHUB_PAT = os.getenv("GITHUB_PAT", "")
