@@ -40,8 +40,10 @@ async def github_webhook(user_id: str, codebase_id: str, request: Request):
                 # Store current commit hash in case we need to rollback
                 old_commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=user_storage).decode('utf-8').strip()
                 
-                # Pull latest changes
-                subprocess.run(['git', 'pull'], cwd=user_storage, check=True)
+                # Pull latest changes (Hard reset to avoid conflicts with generated files)
+                branch = payload.get("ref", "refs/heads/main").split("/")[-1]
+                subprocess.run(['git', 'fetch', '--all'], cwd=user_storage, check=True)
+                subprocess.run(['git', 'reset', '--hard', f'origin/{branch}'], cwd=user_storage, check=True)
                 
                 # --- NEW: COMMIT SECURITY LAYER ---
                 print("Running Security Audit on new commit...")
@@ -94,21 +96,33 @@ async def github_webhook(user_id: str, codebase_id: str, request: Request):
                 print(f"Git operation failed: {e}")
                 return {"status": "error"}
                 
-            # Get port if it exists
+            # Get existing metadata
             db = state_manager.load_db()
             assigned_port = None
+            proj_name = None
+            existing_entry = None
             for cont_id, data in db["containers"].items():
                 if data["codebase_id"] == codebase_id:
                     assigned_port = data.get("port")
+                    proj_name = data.get("project_name")
+                    existing_entry = data.get("entry_point_file")
                     break
             
             success, new_container_id = shell_worker.rebuild_container(user_id, codebase_id, port=assigned_port)
             if success:
-                # Update state manager to point to the new container ID
+                # Update state manager
                 for cont_id, data in list(db["containers"].items()):
                     if data["codebase_id"] == codebase_id:
                         state_manager.remove_container(cont_id)
-                state_manager.add_container(user_id, new_container_id, codebase_id)
+                
+                state_manager.add_container(
+                    user_id, 
+                    new_container_id, 
+                    codebase_id, 
+                    port=assigned_port, 
+                    project_name=proj_name, 
+                    entry_point_file=existing_entry
+                )
                 
                 # Notify user
                 import telebot

@@ -1,73 +1,74 @@
-# ☁️ BrahMos Cloud: AI-Driven PaaS Orchestrator
+# ☁️ BrahMos Cloud: Autonomous AI-Native PaaS
 
-BrahMos Cloud is a sophisticated, lightweight **Platform as a Service (PaaS)** solution engineered to bridge the gap between AI intelligence and containerized hosting. Designed for speed, security, and developer convenience, it enables users to deploy full-stack bots, web applications, and scripts directly through a Telegram interface.
+BrahMos Cloud is an enterprise-grade **AI-native Platform as a Service (PaaS)** that automates the entire software lifecycle. Engineered to bridge the gap between AI intelligence and high-performance containerized hosting, it enables developers to deploy full-stack bots, APIs, and web applications entirely through an intelligent, agent-driven interface.
 
-By leveraging **OpenAI's Function Calling** and **Docker Engine SDK**, BrahMos Cloud automates the entire DevOps lifecycle—from security auditing and dependency resolution to isolated deployment and real-time resource monitoring.
+Developed by a 14-year-old engineer on a mobile-first environment, BrahMos Cloud is a testament to the fact that innovation is not limited by hardware—but by the architect's vision.
 
 ---
 
 ## 🚀 Enterprise-Grade Features
 
 ### 🛡️ AI-Native Security Guardrails
-BrahMos Cloud doesn't just run code; it understands it. Every deployment undergoes a mandatory security scan by a specialized LLM agent. 
-- **Malware Interdiction:** Detects miners, stressers, and malicious scripts before they reach the VPS.
-- **Auto-Secret Extraction:** Beginners often expose tokens; our AI automatically identifies and migrates them into secure `.env` files, rewriting deployment scripts on the fly to ensure security compliance.
+BrahMos Cloud doesn't just run code; it audits it. Every deployment undergoes a mandatory multi-layer security scan by our specialized LLM agents.
+- **Threat Interdiction:** Automatically detects and rejects malware, crypto-miners, and malicious payloads.
+- **Secret Auto-Extraction:** Identifies hardcoded credentials and securely migrates them to encrypted environment variables, ensuring zero-leak deployments.
 
-### 🐳 Robust Container Orchestration
-- **Full Isolation:** Every project runs in a dedicated, non-root Docker container, ensuring a multi-tenant environment where workloads are strictly separated.
-- **Dynamic Resource Enforcement:** A built-in **Watchdog Sniper** monitors RAM and Disk usage in real-time, instantly isolating or terminating processes that exceed their allocated quota.
-- **System-Level Dependency Resolution:** Automatically detects project requirements and installs necessary system libraries (`ffmpeg`, `gcc`, `python-dev`, etc.) to ensure successful builds.
+### 🐳 Autonomous Container Orchestration
+- **Polyglot Runtime:** Fully managed support for Python, Node.js, and TypeScript, with automatic dependency resolution and environment setup.
+- **Resource Sniper:** A built-in real-time Watchdog that monitors and enforces RAM/Disk usage, ensuring multi-tenant stability.
+- **Zero-Touch Deployment:** Native GitHub integration that triggers automated audits, builds, and redeployments upon every `git push`.
 
-### 🔄 Zero-Friction CI/CD
-- **Native Webhooks:** Integrated FastAPI-powered webhook listener for GitHub.
-- **Auto-Redeployment:** Push to your repository, and BrahMos Cloud will automatically pull the latest changes, rebuild the image, and cycle the container without human intervention.
-
-### 📊 Modern UI/UX
-- **Telegram Dashboard:** A high-performance, OSINT-inspired grid interface for managing applications.
-- **Real-Time Analytics:** View live uptime (Runtime) and memory consumption metrics for every active project.
+### ⚡ The "BrahMos" Advantage
+- **Mobile-First Design:** Optimized for low-bandwidth and mobile-first development environments.
+- **Autonomous Recovery:** If a container crashes, the agentic infrastructure analyzes the logs, writes a patch, and redeploys the service automatically.
+- **Civic Scale:** Built with a vision to eventually integrate with physical IoT infrastructure for environmental and civic optimization (AQI monitoring and remediation).
 
 ---
 
-## 🛠️ Technical Architecture
+## 🛠 Technical Architecture
 
-- **Backend:** Python 3.10+
-- **Orchestration:** Docker SDK for Python
-- **AI Integration:** OpenAI GPT-4o with Native Tool Calling
-- **Web Layer:** FastAPI & Uvicorn
-- **UI Framework:** pyTelegramBotAPI
-- **Process Management:** PM2 (for core bot stability)
+| Layer | Technology |
+| :--- | :--- |
+| **Orchestration** | Docker Engine SDK |
+| **AI Brain** | OpenAI GPT-4o with Agentic Tool Calling |
+| **Interface** | Telegram (High-Performance Async I/O) |
+| **Backend** | FastAPI / Uvicorn |
+| **Ops** | PM2 Managed |
 
 ---
 
-## 📦 Getting Started
+## 🚀 Getting Started
 
-### 1. Prerequisites
-- Linux VPS (Ubuntu 22.04+ recommended)
-- Docker Engine installed and running
+### Prerequisites
+- Linux VPS (Ubuntu 22.04+)
+- Docker Engine
 - Python 3.10+
 
-### 2. Installation
+### Installation
 ```bash
 git clone https://github.com/ankurmoran96-openai/brahmoscloud.git
 cd brahmoscloud
 pip install -r requirements.txt
 ```
 
-### 3. Configuration
-Create a `.env` file in the root directory. **BrahMos Cloud is highly configurable.** You must define your own `SYSTEM_PROMPT` to guide the AI's deployment logic.
+### Configuration
+Create a `.env` file in the root:
 ```env
-BOT_TOKEN=your_telegram_bot_token
-ADMIN_ID=your_telegram_id
-AI_API_KEY=your_openai_api_key
-GITHUB_PAT=your_github_personal_access_token (optional)
-SYSTEM_PROMPT=Read the code and define your security/deployment rules here.
+BOT_TOKEN=your_token
+AI_API_KEY=your_key
+ADMIN_ID=your_id
+SYSTEM_PROMPT=Your_security_rules_here
 ```
 
 ---
 
-## 🛡️ License
+## 💡 The Vision
+BrahMos Cloud is the core engine of the **BrahMos Organization**, a mission-driven tech initiative based in India. We believe in building infrastructure that empowers the youth to solve real-world problems—from civic automation to air quality restoration. 
 
-This project is open-source and licensed under the **MIT License**. We encourage community contributions and forks for innovation.
+We are not just building software; we are building a new generation of systems engineers.
 
 ---
-*Developed with grit and vision by a 14-year-old on a mobile device.*
+
+## 📜 License
+MIT License. Built with grit and vision by **Ankur Moran**.
+[Telegram](https://t.me/Ankxrrrr) | [GitHub](https://github.com/ankurmoran96-openai)

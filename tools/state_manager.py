@@ -38,104 +38,125 @@ def is_user_suspicious(user_id):
     return str(user_id) in users
 
 def load_db():
-    with db_lock:
-        if not os.path.exists(DB_FILE):
+    if not os.path.exists(DB_FILE):
+        return {"users": {}, "containers": {}}
+    with open(DB_FILE, 'r') as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
             return {"users": {}, "containers": {}}
-        with open(DB_FILE, 'r') as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {"users": {}, "containers": {}}
 
 def save_db(data):
-    with db_lock:
-        with open(DB_FILE, 'w') as f:
-            json.dump(data, f, indent=4)
+    with open(DB_FILE, 'w') as f:
+        json.dump(data, f, indent=4)
 
 def get_all_users():
-    db = load_db()
-    return db["users"]
+    with db_lock:
+        db = load_db()
+        return db["users"]
 
 def get_user(user_id):
-    db = load_db()
-    user_id_str = str(user_id)
-    if user_id_str not in db["users"]:
-        # Initialize default user state
-        db["users"][user_id_str] = {
-            "tier": "free",
-            "premium_expiry": None, # Date string or None
-            "active_bots": [],
-            "resource_usage": {"ram": 0, "disk": 0},
-            "github_token": None
-        }
-        save_db(db)
-    
-    user = db["users"][user_id_str]
-    # Handle legacy users without premium_expiry field
-    if "premium_expiry" not in user:
-        user["premium_expiry"] = None
-        save_db(db)
+    with db_lock:
+        db = load_db()
+        user_id_str = str(user_id)
+        if user_id_str not in db["users"]:
+            # Initialize default user state
+            db["users"][user_id_str] = {
+                "tier": "free",
+                "premium_expiry": None, # Date string or None
+                "active_bots": [],
+                "resource_usage": {"ram": 0, "disk": 0},
+                "github_token": None
+            }
+            save_db(db)
         
-    if "github_token" not in user:
-        user["github_token"] = None
-        save_db(db)
-        
-    return user
+        user = db["users"][user_id_str]
+        # Handle legacy users without premium_expiry field
+        if "premium_expiry" not in user:
+            user["premium_expiry"] = None
+            save_db(db)
+            
+        if "github_token" not in user:
+            user["github_token"] = None
+            save_db(db)
+            
+        return user
 
 def update_user_github_token(user_id, token):
-    db = load_db()
-    user_id_str = str(user_id)
-    if user_id_str not in db["users"]:
-        get_user(user_id)
+    with db_lock:
         db = load_db()
-    
-    db["users"][user_id_str]["github_token"] = token
-    save_db(db)
-    return True
-
-def update_user_premium(user_id, days, tier="pro"):
-    db = load_db()
-    user_id_str = str(user_id)
-    if user_id_str not in db["users"]:
-        get_user(user_id)
-        db = load_db()
+        user_id_str = str(user_id)
+        if user_id_str not in db["users"]:
+            db["users"][user_id_str] = {
+                "tier": "free",
+                "premium_expiry": None,
+                "active_bots": [],
+                "resource_usage": {"ram": 0, "disk": 0},
+                "github_token": None
+            }
         
-    if days > 0:
-        expiry_date = datetime.now() + timedelta(days=days)
-        db["users"][user_id_str]["tier"] = tier.lower()
-        db["users"][user_id_str]["premium_expiry"] = expiry_date.strftime("%Y-%m-%d %H:%M:%S")
-    else:
-        db["users"][user_id_str]["tier"] = "free"
-        db["users"][user_id_str]["premium_expiry"] = None
-        
-    save_db(db)
-    return True
-
-def add_container(user_id, container_id, codebase_id, port=None, project_name=None, entry_point_file=None):
-    db = load_db()
-    user_id_str = str(user_id)
-    if user_id_str not in db["users"]:
-        get_user(user_id) # Initialize
-        db = load_db()
-    
-    db["users"][user_id_str]["active_bots"].append(container_id)
-    db["containers"][container_id] = {
-        "user_id": user_id,
-        "codebase_id": codebase_id,
-        "project_name": project_name or f"Project-{codebase_id}",
-        "status": "running",
-        "port": port,
-        "entry_point_file": entry_point_file
-    }
-    save_db(db)
-
-def update_project_name(container_id, new_name):
-    db = load_db()
-    if container_id in db["containers"]:
-        db["containers"][container_id]["project_name"] = new_name
+        db["users"][user_id_str]["github_token"] = token
         save_db(db)
         return True
-    return False
+
+def update_user_premium(user_id, days, tier="pro"):
+    with db_lock:
+        db = load_db()
+        user_id_str = str(user_id)
+        if user_id_str not in db["users"]:
+            db["users"][user_id_str] = {
+                "tier": "free",
+                "premium_expiry": None,
+                "active_bots": [],
+                "resource_usage": {"ram": 0, "disk": 0},
+                "github_token": None
+            }
+            
+        if days > 0:
+            expiry_date = datetime.now() + timedelta(days=days)
+            db["users"][user_id_str]["tier"] = tier.lower()
+            db["users"][user_id_str]["premium_expiry"] = expiry_date.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            db["users"][user_id_str]["tier"] = "free"
+            db["users"][user_id_str]["premium_expiry"] = None
+            
+        save_db(db)
+        return True
+
+def add_container(user_id, container_id, codebase_id, port=None, project_name=None, entry_point_file=None):
+    with db_lock:
+        db = load_db()
+        user_id_str = str(user_id)
+        if user_id_str not in db["users"]:
+            db["users"][user_id_str] = {
+                "tier": "free",
+                "premium_expiry": None,
+                "active_bots": [],
+                "resource_usage": {"ram": 0, "disk": 0},
+                "github_token": None
+            }
+        
+        if container_id not in db["users"][user_id_str]["active_bots"]:
+            db["users"][user_id_str]["active_bots"].append(container_id)
+            
+        db["containers"][container_id] = {
+            "user_id": user_id,
+            "codebase_id": codebase_id,
+            "project_name": project_name or f"Project-{codebase_id}",
+            "status": "running",
+            "port": port,
+            "entry_point_file": entry_point_file
+        }
+        save_db(db)
+
+def update_project_name(container_id, new_name):
+    with db_lock:
+        db = load_db()
+        if container_id in db["containers"]:
+            db["containers"][container_id]["project_name"] = new_name
+            save_db(db)
+            return True
+        return False
 
 def get_next_available_port():
     db = load_db()

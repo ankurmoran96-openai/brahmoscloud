@@ -153,7 +153,10 @@ def rebuild_container(user_id, codebase_id, port=None):
             pass
             
         print(f"Starting container {container_name} with port {port}...")
-        ports_config = { '8000/tcp': port } if port else None
+        
+        # Setup port mapping if provided
+        internal_port = port if port else 8000
+        ports_config = { f'{internal_port}/tcp': port } if port else None
         
         container = client.containers.run(
             image_tag,
