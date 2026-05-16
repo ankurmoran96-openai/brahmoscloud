@@ -138,6 +138,8 @@ def rebuild_container(user_id, codebase_id, port=None):
     if not os.path.exists(user_storage):
         return False, "Project storage not found"
         
+    create_dockerfile(user_storage)
+    
     image_tag = f"brahmos_{user_id}_{codebase_id}".lower()
     container_name = f"brahmos_cont_{user_id}_{codebase_id}".lower()
     
