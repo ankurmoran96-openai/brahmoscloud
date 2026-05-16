@@ -131,28 +131,49 @@ def call_ai(prompt, tools, tool_choice="required"):
         "tools": tools, "tool_choice": tool_choice
     }
     
-    try:
-        response = requests.post(config.AI_API_URL, headers=headers, json=payload, timeout=60)
-        if response.status_code == 200:
-            res_json = response.json()
-            tool_calls = res_json['choices'][0]['message'].get('tool_calls')
+    # Try the Primary Provider with a Retry Loop
+    max_retries = 3
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(config.AI_API_URL, headers=headers, json=payload, timeout=60)
             
-            # Self-Healing JSON Extraction
-            if not tool_calls:
-                content = res_json['choices'][0]['message'].get('content', '')
-                if content:
-                    json_match = re.search(r'\{.*\}', content, re.DOTALL)
-                    if json_match:
-                        try:
-                            args = json.loads(json_match.group())
-                            name = "discovery_success" if "Agent 1" in prompt else "audit_verified" if "Agent 2" in prompt else "finalize_deployment"
-                            return [{"function": {"name": name, "arguments": json.dumps(args)}}]
-                        except: pass
-            return tool_calls
-        return None
-    except Exception as e:
-        print(f"AI Call failed: {e}")
-        return None
+            if response.status_code == 200:
+                res_json = response.json()
+                tool_calls = res_json['choices'][0]['message'].get('tool_calls')
+                
+                # Self-Healing JSON Extraction
+                if not tool_calls:
+                    content = res_json['choices'][0]['message'].get('content', '')
+                    if content:
+                        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                        if json_match:
+                            try:
+                                args = json.loads(json_match.group())
+                                name = "discovery_success" if "Agent 1" in prompt else "audit_verified" if "Agent 2" in prompt else "finalize_deployment"
+                                return [{"function": {"name": name, "arguments": json.dumps(args)}}]
+                            except: pass
+                return tool_calls
+            
+            # If Rate Limited or Server Error, Wait and Retry
+            if response.status_code in [429, 500, 502, 503, 504]:
+                wait_time = (attempt + 1) * 5 # Incremental wait: 5s, 10s, 15s
+                print(f"API Error {response.status_code}. Retrying in {wait_time}s... (Attempt {attempt+1}/{max_retries})")
+                time.sleep(wait_time)
+                continue
+            
+            print(f"API Failed with status {response.status_code}: {response.text}")
+            return None
+
+        except Exception as e:
+            print(f"AI Call Attempt {attempt+1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(5)
+                continue
+            return None
+    
+    return None
 
 def orchestrate_deployment(user_id, file_path_list, code_contents, existing_entry_point=None):
     # Extract imports to assist AI
