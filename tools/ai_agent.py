@@ -137,13 +137,49 @@ def call_ai(prompt, tools, tool_choice="required"):
         "tools": tools,
         "tool_choice": tool_choice
     }
+    
     try:
+        import time
         response = requests.post(config.AI_API_URL, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
-        result = response.json()
-        return result['choices'][0]['message'].get('tool_calls')
+        
+        # If Rate Limited (429), Wait and Retry once
+        if response.status_code == 429:
+            print("BrahMos Cloud: Gemini Rate Limited. Waiting 5 seconds...")
+            time.sleep(5)
+            response = requests.post(config.AI_API_URL, headers=headers, json=payload, timeout=60)
+            
+        if response.status_code == 200:
+            result = response.json()
+            return result['choices'][0]['message'].get('tool_calls')
+            
+        # If still failing, Failover to GitHub Models
+        print(f"BrahMos Cloud: Primary API failed ({response.status_code}). Attempting GitHub Failover...")
+        github_token = config.GITHUB_PAT
+        gh_headers = {
+            "Authorization": f"Bearer {github_token}",
+            "Content-Type": "application/json"
+        }
+        gh_payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "Analyze the codebase according to your instructions."}
+            ],
+            "tools": tools,
+            "tool_choice": tool_choice
+        }
+        gh_response = requests.post("https://models.github.ai/inference/chat/completions", headers=gh_headers, json=gh_payload, timeout=60)
+        
+        if gh_response.status_code == 200:
+            print("BrahMos Cloud: GitHub Failover Successful. Project saved. 🚀")
+            result = gh_response.json()
+            return result['choices'][0]['message'].get('tool_calls')
+            
+        print(f"BrahMos Cloud: All providers failed. (Gemini: {response.status_code}, GitHub: {gh_response.status_code})")
+        return None
+        
     except Exception as e:
-        print(f"AI Call failed: {e}")
+        print(f"AI Call failed with critical error: {e}")
         return None
 
 def orchestrate_deployment(user_id, file_path_list, code_contents, existing_entry_point=None):
