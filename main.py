@@ -990,6 +990,20 @@ Enable the <b>Proxy (Orange Cloud)</b> in Cloudflare. This hides your VPS IP and
     
     smart_respond(call, text, markup=markup, edit=True)
 
+def safe_edit(call, text, markup=None):
+    chat_id = call.message.chat.id
+    message_id = call.message.message_id
+    try:
+        # Try to edit as caption first (if it has a photo)
+        bot.edit_message_caption(text, chat_id, message_id, reply_markup=markup, parse_mode='HTML')
+    except Exception:
+        try:
+            # Try to edit as text
+            bot.edit_message_text(text, chat_id, message_id, reply_markup=markup, parse_mode='HTML')
+        except Exception:
+            # Fallback to sending a new message
+            bot.send_message(chat_id, text, reply_markup=markup, parse_mode='HTML')
+
 @bot.callback_query_handler(func=lambda call: call.data.startswith("redeploy_"))
 def redeploy_callback(call):
     bot.answer_callback_query(call.id, "🔄 Redeploying container...")
@@ -1011,7 +1025,7 @@ def redeploy_callback(call):
     # Re-run AI Orchestration to fix any hallucinated scripts
     user_storage = os.path.join(shell_worker.STORAGE_BASE, str(user_id), codebase_id)
     if os.path.exists(user_storage):
-        bot.edit_message_text("🤖 <b>Re-evaluating deployment scripts...</b>", call.message.chat.id, call.message.message_id)
+        safe_edit(call, "🤖 <b>Re-evaluating deployment scripts...</b>")
         file_list, code_contents = ai_agent.read_relevant_files(user_storage)
         deployment_data = ai_agent.orchestrate_deployment(user_id, file_list, code_contents, existing_entry_point=existing_entry)
         
@@ -1036,7 +1050,7 @@ def redeploy_callback(call):
             # Update existing entry
             existing_entry = deployment_data.get("entry_point_file")
     
-    bot.edit_message_text("🐳 <b>Rebuilding Docker container...</b>", call.message.chat.id, call.message.message_id)
+    safe_edit(call, "🐳 <b>Rebuilding Docker container...</b>")
     success, result = shell_worker.rebuild_container(user_id, codebase_id, port=assigned_port)
     if success:
         new_container_id = result
